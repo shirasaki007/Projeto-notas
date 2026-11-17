@@ -1,3 +1,5 @@
+@using System.Text
+@using System.Text.Encodings.Web
 @inject ClientClock Clock
 
 <div class="list-head">
@@ -37,9 +39,14 @@
     @if (Loading)
     {
         <ul class="skeleton-list" aria-busy="true" aria-label="Carregando notas">
-            @for (var i = 0; i < 6; i++)
+            @for (var i = 0; i < 4; i++)
             {
-                <li class="skeleton-item"><span class="sk sk-title"></span><span class="sk sk-line"></span><span class="sk sk-line short"></span></li>
+                <li class="skeleton-item">
+                    <span class="skeleton-heading"><span class="sk sk-icon"></span><span class="sk sk-title"></span><span class="sk sk-action"></span></span>
+                    <span class="sk sk-line"></span>
+                    <span class="sk sk-line short"></span>
+                    <span class="skeleton-meta"><span class="sk sk-meta"></span><span class="sk sk-meta short"></span></span>
+                </li>
             }
         </ul>
     }
@@ -53,7 +60,9 @@
     {
         @if (!string.IsNullOrWhiteSpace(Query.Search))
         {
-            <EmptyState Icon="search" Title="Nada encontrado" Description="@($"Nenhuma nota corresponde a “{Query.Search}”. Tente outras palavras.")" />
+            <EmptyState Icon="search" Title="Nada encontrado" Description="@($"Nenhuma nota corresponde a “{Query.Search}”. Tente outras palavras.")">
+                <button class="btn btn-ghost" @onclick="() => OnSearch.InvokeAsync(string.Empty)">Limpar busca</button>
+            </EmptyState>
         }
         else if (Query.View == NoteView.Trash)
         {
@@ -80,30 +89,46 @@
     }
     else
     {
-        <ul class="note-items">
-            @foreach (var n in Items)
+        <div class="note-groups">
+            @foreach (var group in Groups)
             {
-                <li @key="n.Id" draggable="@(!n.IsArchived && !n.IsTrashed)"
-                    @ondragstart="() => OnStartDrag.InvokeAsync(n.Id)" @ondragend="OnEndDrag">
-                    <button class="note-item @(n.Id == SelectedId ? "selected" : "")" aria-current="@(n.Id == SelectedId ? "true" : null)"
-                            aria-describedby="note-folder-move-help" @onclick="() => OnSelect.InvokeAsync(n.Id)">
-                        <span class="note-item-top">
-                            <span class="note-title">@(string.IsNullOrWhiteSpace(n.Title) ? "Sem título" : n.Title)</span>
-                            <span class="note-flags">
-                                @if (n.IsPinned) { <Icon Name="pin" Size="13" /> }
-                                @if (n.IsFavorite) { <Icon Name="star" Size="13" /> }
-                            </span>
-                        </span>
-                        <span class="note-snippet">@(n.Snippet.Length == 0 ? "Nota vazia" : n.Snippet)</span>
-                        <span class="note-meta">
-                            <time datetime="@n.UpdatedAt.ToString("O")">@Clock.Relative(n.UpdatedAt)</time>
-                            @if (n.FolderName is not null) { <span class="meta-pill"><Icon Name="folder" Size="11" /> @n.FolderName</span> }
-                            @foreach (var t in n.Tags.Take(2)) { <span class="meta-pill">#@t</span> }
-                        </span>
-                    </button>
-                </li>
+                <section class="note-group" aria-label="@group.Title">
+                    <div class="note-group-heading">
+                        <h2>@group.Title</h2>
+                        <span class="note-group-count">@group.Items.Count</span>
+                    </div>
+                    <ul class="note-items @(Query.Search is not null ? "search-results" : "")">
+                        @foreach (var n in group.Items)
+                        {
+                            <li @key="n.Id" draggable="@(!n.IsArchived && !n.IsTrashed)"
+                                @ondragstart="() => OnStartDrag.InvokeAsync(n.Id)" @ondragend="OnEndDrag">
+                                <button class="note-item @(n.Id == SelectedId ? "selected" : "")"
+                                        aria-current="@(n.Id == SelectedId ? "true" : null)"
+                                        aria-describedby="note-folder-move-help" @onclick="() => OnSelect.InvokeAsync(n.Id)">
+                                    <span class="note-item-top">
+                                        <span class="note-heading">
+                                            <span class="note-icon"><Icon Name="notes" Size="14" /></span>
+                                            <span class="note-title">@HighlightText(string.IsNullOrWhiteSpace(n.Title) ? "Sem título" : n.Title)</span>
+                                        </span>
+                                        <span class="note-flags">
+                                            @if (n.IsPinned) { <span class="sr-only">Fixada</span><Icon Name="pin" Size="13" /> }
+                                            @if (n.IsFavorite) { <span class="sr-only">Favorita</span><Icon Name="star" Size="13" /> }
+                                        </span>
+                                    </span>
+                                    <span class="note-snippet">@HighlightText(n.Snippet.Length == 0 ? "Nota vazia" : n.Snippet)</span>
+                                    <span class="note-meta">
+                                        <time datetime="@n.UpdatedAt.ToString("O")" title="@Clock.Full(n.UpdatedAt)">@Clock.Relative(n.UpdatedAt)</time>
+                                        @if (n.FolderName is not null) { <span class="meta-pill"><Icon Name="folder" Size="11" /> @HighlightText(n.FolderName)</span> }
+                                        @foreach (var t in n.Tags.Take(2)) { <span class="meta-pill">#@HighlightText(t)</span> }
+                                        @if (n.Tags.Count > 2) { <span class="meta-pill more-tags">+@(n.Tags.Count - 2)</span> }
+                                    </span>
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                </section>
             }
-        </ul>
+        </div>
         @if (HasMore)
         {
             <div class="load-more">
@@ -114,6 +139,8 @@
 </div>
 
 @code {
+    private sealed record NoteGroup(string Title, IReadOnlyList<NoteListItemDto> Items);
+
     [Parameter] public string Title { get; set; } = "";
     [Parameter] public NoteQuery Query { get; set; } = new();
     [Parameter] public IReadOnlyList<NoteListItemDto> Items { get; set; } = [];
@@ -135,9 +162,105 @@
     [Parameter] public EventCallback OnEndDrag { get; set; }
 
     private bool _filters;
+    private string[] _searchTerms = [];
+
+    protected override void OnParametersSet()
+    {
+        _searchTerms = (Query.Search ?? "")
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(term => term.Length)
+            .ToArray();
+    }
+
+    private IReadOnlyList<NoteGroup> Groups
+    {
+        get
+        {
+            var groups = new List<NoteGroup>();
+            var notes = Items;
+            var today = Clock.ToLocal(DateTime.UtcNow).Date;
+            var showPinnedGroup = Query.View == NoteView.All
+                && Query.FolderId is null
+                && Query.TagId is null
+                && string.IsNullOrWhiteSpace(Query.Search);
+
+            if (showPinnedGroup)
+            {
+                var pinned = Items.Where(note => note.IsPinned).ToList();
+                if (pinned.Count > 0) groups.Add(new("Fixadas", pinned));
+                notes = Items.Where(note => !note.IsPinned).ToList();
+            }
+
+            groups.AddRange(notes
+                .GroupBy(note => DateGroup(note.UpdatedAt, today))
+                .OrderBy(group => DateGroupOrder(group.Key))
+                .Select(group => new NoteGroup(group.Key, group.ToList())));
+
+            return groups;
+        }
+    }
 
     private Task SearchInput(ChangeEventArgs e) => OnSearch.InvokeAsync(e.Value?.ToString() ?? "");
     private bool HasDates => Query.From is not null || Query.To is not null;
+
+    private string DateGroup(DateTime updatedAt, DateTime today)
+    {
+        var localDate = Clock.ToLocal(updatedAt).Date;
+        if (localDate == today) return "Hoje";
+        if (localDate == today.AddDays(-1)) return "Ontem";
+
+        var daysSinceMonday = ((int)today.DayOfWeek + 6) % 7;
+        var startOfWeek = today.AddDays(-daysSinceMonday);
+        if (localDate >= startOfWeek) return "Esta semana";
+        if (localDate.Year == today.Year && localDate.Month == today.Month) return "Este mês";
+        return "Mais antigas";
+    }
+
+    private static int DateGroupOrder(string group) => group switch
+    {
+        "Hoje" => 0,
+        "Ontem" => 1,
+        "Esta semana" => 2,
+        "Este mês" => 3,
+        _ => 4
+    };
+
+    private MarkupString HighlightText(string value)
+    {
+        if (_searchTerms.Length == 0) return new(HtmlEncoder.Default.Encode(value));
+
+        var html = new StringBuilder();
+        var cursor = 0;
+        while (cursor < value.Length)
+        {
+            var matchIndex = -1;
+            var matchLength = 0;
+            foreach (var term in _searchTerms)
+            {
+                var index = value.IndexOf(term, cursor, StringComparison.OrdinalIgnoreCase);
+                if (index >= 0 && (matchIndex < 0 || index < matchIndex || index == matchIndex && term.Length > matchLength))
+                {
+                    matchIndex = index;
+                    matchLength = term.Length;
+                }
+            }
+
+            if (matchIndex < 0)
+            {
+                html.Append(HtmlEncoder.Default.Encode(value.Substring(cursor)));
+                break;
+            }
+
+            html.Append(HtmlEncoder.Default.Encode(value.Substring(cursor, matchIndex - cursor)));
+            html.Append("<mark class=\"search-match\">")
+                .Append(HtmlEncoder.Default.Encode(value.Substring(matchIndex, matchLength)))
+                .Append("</mark>");
+            cursor = matchIndex + matchLength;
+        }
+
+        return new(html.ToString());
+    }
 
     private Task DateChanged(bool isFrom, string? value)
     {

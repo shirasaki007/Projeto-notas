@@ -1,0 +1,158 @@
+/* Theme palettes. Keep component styles bound to these semantic color tokens. */
+:root {
+  color-scheme: dark;
+  --bg: #09090b;
+  --surface: #16161a;
+  --surface-2: #111113;
+  --sunken: #1d1d22;
+  --text: #f4f4f5;
+  --muted: #a1a1aa;
+  --faint: #71717a;
+  --border: #2b2b33;
+  --border-strong: #3a3a45;
+  --accent: #8b5cf6;
+  --accent-solid: #8b5cf6;
+  --accent-hover: #9d6bff;
+  --accent-active: #7c4dff;
+  --accent-soft: rgba(139,92,246,.16);
+  --accent-glow: rgba(139,92,246,.14);
+  --on-accent: #fff;
+  --danger: #f87171;
+  --danger-hover: #fb8585;
+  --danger-active: #ef6a6a;
+  --danger-soft: rgba(248,113,113,.14);
+  --on-danger: #18181b;
+  --success: #4ade80;
+  --success-soft: rgba(74,222,128,.12);
+  --warn: #fbbf24;
+  --warn-soft: rgba(251,191,36,.12);
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.18);
+  --shadow-md: 0 8px 24px rgba(0,0,0,.16);
+  --shadow-lg: 0 16px 40px rgba(0,0,0,.22);
+  --shadow-sidebar: 1px 0 0 rgba(255,255,255,.025), 6px 0 20px rgba(0,0,0,.07);
+  --shadow-active: inset 0 1px 0 rgba(255,255,255,.04), 0 2px 6px rgba(0,0,0,.12);
+  --shadow-accent: 0 2px 8px rgba(139,92,246,.18);
+  --shadow-focus: 0 0 0 3px var(--accent-soft);
+  --shadow-inset-highlight: inset 0 1px 0 var(--sidebar-inset-highlight);
+  --shadow-sidebar-focus: var(--shadow-inset-highlight), var(--shadow-focus);
+  --shadow-button-accent: inset 0 1px 0 var(--button-highlight), var(--shadow-accent);
+  --shadow-chip-glow: 0 0 10px var(--sidebar-active-glow);
+  --focus-ring: rgba(139,92,246,.38);
+  --button-highlight: rgba(255,255,255,.08);
+  --overlay: rgba(5,5,8,.56);
+
+  --sidebar-bg: rgba(16,16,18,.97);
+  --sidebar-bg-bottom: rgba(17,17,19,.98);
+  --sidebar-highlight: rgba(139,92,246,.04);
+  --sidebar-control-bg: rgba(22,22,26,.84);
+  --sidebar-hover: #1d1d22;
+  --sidebar-selected: #24242b;
+  --sidebar-section-line: #2b2b33;
+  --sidebar-edge: #2b2b33;
+  --sidebar-divider: rgba(255,255,255,.055);
+  --sidebar-active-glow: rgba(139,92,246,.1);
+  --sidebar-inset-highlight: rgba(255,255,255,.04);
+  --sidebar-footer-wash: rgba(0,0,0,.05);
+  --sidebar-avatar-bg: rgba(139,92,246,.12);
+  --sidebar-avatar-border: rgba(139,92,246,.22);
+  --sidebar-favorite-bg: rgba(251,191,36,.07);
+  --sidebar-icon: #a1a1aa;
+  --sidebar-label: #a1a1aa;
+  --sidebar-count-active: rgba(139,92,246,.18);
+
+  --shadow-active-glow: 0 0 12px var(--sidebar-active-glow);
+  --shadow-drop-target: inset 0 0 0 1px var(--sidebar-selected), 0 0 0 3px var(--accent-soft);
+  --shadow-color-choice: 0 0 0 1px var(--sidebar-edge);
+  --shadow-color-choice-active: 0 0 0 2px var(--accent);
+  --shadow-dot: 0 0 0 2px var(--sidebar-bg);
+
+  --note-card-bg: #111113;
+  --note-card-hover-bg: #16161a;
+  --note-card-selected-bg: #1d1d22;
+  --note-card-border: rgba(255,255,255,.045);
+  --note-card-selected-border: rgba(139,92,246,.28);
+  --note-card-hover-glow: 0 6px 16px rgba(0,0,0,.12);
+  --note-card-selected-glow: 0 8px 20px rgba(139,92,246,.08);
+  --scrollbar-thumb: rgba(161,161,170,.24);
+  --scrollbar-thumb-hover: rgba(161,161,170,.42);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #fafafb;
+  --surface: #fff;
+  --surface-2: #f5f5f7;
+  --sunken: #efeff3;
+  --text: #18181b;
+  --muted: #52525b;
+  --faint: #71717a;
+  --border: #dadae3;
+  --border-strong: #c9c9d3;
+  --accent: #8b5cf6;
+  --accent-solid: #8b5cf6;
+  --accent-hover: #9d6bff;
+  --accent-active: #7c4dff;
+  --accent-soft: rgba(139,92,246,.1);
+  --accent-glow: rgba(139,92,246,.12);
+  --on-accent: #fff;
+  --danger: #b42318;
+  --danger-hover: #9f1f16;
+  --danger-active: #8e1c14;
+  --danger-soft: #fee4e2;
+  --on-danger: #fff;
+  --success: #18794e;
+  --success-soft: #e6f4ed;
+  --warn: #9a5b00;
+  --warn-soft: #fdf3e1;
+
+  --shadow-sm: 0 1px 2px rgba(24,24,27,.04);
+  --shadow-md: 0 8px 24px rgba(24,24,27,.06);
+  --shadow-lg: 0 16px 40px rgba(24,24,27,.1);
+  --shadow-sidebar: 1px 0 0 rgba(255,255,255,.8), 6px 0 20px rgba(24,24,27,.025);
+  --shadow-active: inset 0 1px 0 rgba(255,255,255,.85), 0 2px 6px rgba(24,24,27,.035);
+  --shadow-accent: 0 2px 8px rgba(139,92,246,.14);
+  --shadow-focus: 0 0 0 3px var(--accent-soft);
+  --shadow-inset-highlight: inset 0 1px 0 var(--sidebar-inset-highlight);
+  --shadow-sidebar-focus: var(--shadow-inset-highlight), var(--shadow-focus);
+  --shadow-button-accent: inset 0 1px 0 var(--button-highlight), var(--shadow-accent);
+  --shadow-chip-glow: 0 0 10px var(--sidebar-active-glow);
+  --focus-ring: rgba(139,92,246,.32);
+  --button-highlight: rgba(255,255,255,.34);
+  --overlay: rgba(24,24,27,.42);
+
+  --sidebar-bg: rgba(245,245,247,.97);
+  --sidebar-bg-bottom: rgba(241,241,245,.98);
+  --sidebar-highlight: rgba(139,92,246,.03);
+  --sidebar-control-bg: rgba(255,255,255,.82);
+  --sidebar-hover: #efeff3;
+  --sidebar-selected: #e8e8ed;
+  --sidebar-section-line: rgba(24,24,27,.08);
+  --sidebar-edge: #dadae3;
+  --sidebar-divider: rgba(24,24,27,.075);
+  --sidebar-active-glow: rgba(139,92,246,.07);
+  --sidebar-inset-highlight: rgba(255,255,255,.85);
+  --sidebar-footer-wash: rgba(255,255,255,.32);
+  --sidebar-avatar-bg: rgba(139,92,246,.075);
+  --sidebar-avatar-border: rgba(139,92,246,.16);
+  --sidebar-favorite-bg: rgba(154,91,0,.045);
+  --sidebar-icon: #71717a;
+  --sidebar-label: #62626d;
+  --sidebar-count-active: rgba(139,92,246,.12);
+
+  --shadow-active-glow: 0 0 12px var(--sidebar-active-glow);
+  --shadow-drop-target: inset 0 0 0 1px var(--sidebar-selected), 0 0 0 3px var(--accent-soft);
+  --shadow-color-choice: 0 0 0 1px var(--sidebar-edge);
+  --shadow-color-choice-active: 0 0 0 2px var(--accent);
+  --shadow-dot: 0 0 0 2px var(--sidebar-bg);
+
+  --note-card-bg: #fff;
+  --note-card-hover-bg: #fff;
+  --note-card-selected-bg: #f7f4ff;
+  --note-card-border: rgba(24,24,27,.055);
+  --note-card-selected-border: rgba(139,92,246,.24);
+  --note-card-hover-glow: 0 6px 16px rgba(24,24,27,.045);
+  --note-card-selected-glow: 0 8px 20px rgba(139,92,246,.07);
+  --scrollbar-thumb: rgba(113,113,122,.24);
+  --scrollbar-thumb-hover: rgba(113,113,122,.42);
+}

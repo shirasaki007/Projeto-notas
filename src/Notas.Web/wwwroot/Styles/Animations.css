@@ -1,0 +1,116 @@
+/* Shared motion timing and all interface transitions/keyframes. */
+:root {
+  --motion-fast: 150ms;
+  --motion-base: 180ms;
+  --motion-slow: 220ms;
+  --ease-premium: cubic-bezier(.22,1,.36,1);
+}
+
+button { transition: color var(--motion-base) var(--ease-premium), background-color var(--motion-base) var(--ease-premium), border-color var(--motion-base) var(--ease-premium), box-shadow var(--motion-base) var(--ease-premium), transform var(--motion-fast) var(--ease-premium); }
+.field input, .inline-input, .filters input, .meta-field select { transition: border-color var(--motion-base) var(--ease-premium), box-shadow var(--motion-base) var(--ease-premium), background-color var(--motion-base) var(--ease-premium); }
+.app { transition: grid-template-columns var(--motion-slow) var(--ease-premium); }
+html.sidebar-resizing .app { transition: none; }
+.sidebar .sidebar-label { transition: opacity var(--motion-fast) var(--ease-premium), transform var(--motion-base) var(--ease-premium); }
+.sidebar .icon-btn { transition: color var(--motion-base) var(--ease-premium), background-color var(--motion-base) var(--ease-premium), border-color var(--motion-base) var(--ease-premium), transform var(--motion-base) var(--ease-premium), opacity var(--motion-base) var(--ease-premium); }
+.sidebar-search { transition: border-color var(--motion-base) var(--ease-premium), box-shadow var(--motion-base) var(--ease-premium); }
+.sidebar-resizer::after { transition: opacity var(--motion-fast) var(--ease-premium); }
+.sidebar-toggle .icon { transition: transform var(--motion-base) var(--ease-premium); }
+.sidebar .nav-item::after, .sidebar .icon-btn::after, .sidebar .new-note::after, .sidebar .chip-btn::after, .sidebar .foot-link::after { transition: opacity var(--motion-base) var(--ease-premium), transform var(--motion-base) var(--ease-premium); }
+.sidebar .new-note { transition: color var(--motion-base) var(--ease-premium), background-color var(--motion-base) var(--ease-premium), border-color var(--motion-base) var(--ease-premium), transform var(--motion-base) var(--ease-premium), opacity var(--motion-base) var(--ease-premium); }
+.sidebar .nav-item { transition: color var(--motion-base) var(--ease-premium), background-color var(--motion-base) var(--ease-premium), border-color var(--motion-base) var(--ease-premium), transform var(--motion-base) var(--ease-premium), opacity var(--motion-base) var(--ease-premium); }
+.sidebar .nav-item::before { transition: opacity var(--motion-base) var(--ease-premium), transform var(--motion-base) var(--ease-premium); }
+.sidebar .section-toggle .icon { transition: transform var(--motion-base) var(--ease-premium); }
+.sidebar .folder-quick-actions [data-tooltip]::after, .sidebar .recent-pin[data-tooltip]::after { transition: opacity var(--motion-base) var(--ease-premium), transform var(--motion-base) var(--ease-premium), visibility 0s linear var(--motion-base); }
+.sidebar .folder-quick-actions [data-tooltip]:hover::after, .sidebar .folder-quick-actions [data-tooltip]:focus-visible::after, .sidebar .recent-pin[data-tooltip]:hover::after, .sidebar .recent-pin[data-tooltip]:focus-visible::after { transition: opacity var(--motion-base) var(--ease-premium), transform var(--motion-base) var(--ease-premium), visibility 0s; }
+.sidebar .folder-quick-actions { transition: opacity var(--motion-base) var(--ease-premium), transform var(--motion-base) var(--ease-premium); }
+.sidebar .folder-row:hover .folder-quick-actions, .sidebar .folder-row:focus-within .folder-quick-actions { transition: opacity var(--motion-base) var(--ease-premium), transform var(--motion-base) var(--ease-premium); }
+.sidebar .folder-menu-item { transition: color var(--motion-base) var(--ease-premium), background-color var(--motion-base) var(--ease-premium), border-color var(--motion-base) var(--ease-premium), transform var(--motion-base) var(--ease-premium), opacity var(--motion-base) var(--ease-premium); }
+.sidebar .folder-color-choice { transition: transform var(--motion-base) var(--ease-premium), box-shadow var(--motion-base) var(--ease-premium); }
+.sidebar .chip-btn { transition: color var(--motion-base) var(--ease-premium), background-color var(--motion-base) var(--ease-premium), border-color var(--motion-base) var(--ease-premium), transform var(--motion-base) var(--ease-premium), opacity var(--motion-base) var(--ease-premium); }
+.sidebar .foot-link { transition: color var(--motion-base) var(--ease-premium), background-color var(--motion-base) var(--ease-premium), border-color var(--motion-base) var(--ease-premium), transform var(--motion-base) var(--ease-premium), opacity var(--motion-base) var(--ease-premium); }
+.note-item { transition: color var(--motion-base) var(--ease-premium), background-color var(--motion-base) var(--ease-premium), border-color var(--motion-base) var(--ease-premium), transform var(--motion-base) var(--ease-premium); }
+.note-item::before, .note-item::after { transition: opacity var(--motion-base) var(--ease-premium), transform var(--motion-base) var(--ease-premium); }
+.note-icon, .note-flags .icon { transition: color var(--motion-base) var(--ease-premium), background-color var(--motion-base) var(--ease-premium), border-color var(--motion-base) var(--ease-premium), transform var(--motion-base) var(--ease-premium); }
+.note-item:hover .note-icon, .note-item:focus-visible .note-icon { color: var(--accent); border-color: var(--note-card-selected-border); transform: scale(1.04); }
+.note-item:hover .note-flags .icon, .note-item:focus-visible .note-flags .icon { transform: scale(1.08); }
+.note-items.search-results > li { animation: note-result-enter var(--motion-base) var(--ease-premium) both; }
+.modal { animation: pop var(--motion-base) var(--ease-premium); }
+.toast { animation: slide var(--motion-base) var(--ease-premium); }
+
+.sidebar .nav-item:active::after, .sidebar .icon-btn:active::after, .sidebar .new-note:active::after, .sidebar .chip-btn:active::after, .sidebar .foot-link:active::after { animation: sidebar-ripple var(--motion-base) var(--ease-premium); }
+.sidebar button:not(.sidebar-toggle):hover .icon, .sidebar .foot-link:hover .icon { animation: sidebar-icon-bounce var(--motion-base) var(--ease-premium); }
+.sidebar .nav-section-head .icon-btn[aria-label="Nova pasta"]:hover .icon { animation: sidebar-add-rotate var(--motion-base) var(--ease-premium); }
+.sidebar .count, .sidebar .chip-count { animation: sidebar-badge-pop var(--motion-base) var(--ease-premium) both; }
+.sidebar .section-content-enter { animation: sidebar-section-enter var(--motion-base) var(--ease-premium) both; }
+.sidebar .folder-row.folder-reordered { animation: sidebar-folder-reorder var(--motion-slow) var(--ease-premium) both; }
+.sidebar .folder-context-menu, .sidebar .folder-customizer { animation: sidebar-menu-enter var(--motion-base) var(--ease-premium) both; }
+.sk { animation: shimmer 1.4s ease infinite; }
+.spinner { animation: spin .7s linear infinite; }
+.pulse { animation: pulse 1.2s ease infinite; }
+
+@keyframes sidebar-ripple {
+  0% { opacity: 0; transform: translate3d(-50%,-50%,0) scale(.25); }
+  25% { opacity: .14; }
+  100% { opacity: 0; transform: translate3d(-50%,-50%,0) scale(2.4); }
+}
+@keyframes sidebar-icon-bounce {
+  0%, 100% { transform: translate3d(0,0,0) scale(1); }
+  55% { transform: translate3d(0,-2px,0) scale(1.06); }
+}
+@keyframes sidebar-add-rotate {
+  from { transform: rotate(0); }
+  to { transform: rotate(45deg); }
+}
+@keyframes sidebar-badge-pop {
+  0% { opacity: .65; transform: scale(.82); }
+  68% { opacity: 1; transform: scale(1.06); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes sidebar-section-enter {
+  from { opacity: 0; transform: translate3d(0,-4px,0); }
+  to { opacity: 1; transform: translate3d(0,0,0); }
+}
+@keyframes sidebar-folder-reorder {
+  from { opacity: .6; transform: translate3d(0,5px,0) scale(.985); }
+  to { opacity: 1; transform: translate3d(0,0,0) scale(1); }
+}
+@keyframes sidebar-menu-enter {
+  from { opacity: 0; transform: translate3d(0,-4px,0) scale(.98); }
+  to { opacity: 1; transform: translate3d(0,0,0) scale(1); }
+}
+@keyframes note-result-enter {
+  from { opacity: 0; transform: translate3d(0,5px,0) scale(.99); }
+  to { opacity: 1; transform: translate3d(0,0,0) scale(1); }
+}
+@keyframes shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+@keyframes pop {
+  from { opacity: 0; transform: translate(-50%, -48%) scale(.98); }
+  to { opacity: 1; transform: translate(-50%, -50%); }
+}
+@keyframes slide {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse { 50% { opacity: .35; } }
+
+@media (min-width: 761px) {
+  .app.sidebar-collapsed .sidebar [data-tooltip]::after { transition: opacity var(--motion-base) var(--ease-premium), transform var(--motion-base) var(--ease-premium), visibility 0s linear var(--motion-base); }
+  .app.sidebar-collapsed .sidebar [data-tooltip]:hover::after, .app.sidebar-collapsed .sidebar [data-tooltip]:focus-visible::after { transition: opacity var(--motion-base) var(--ease-premium), transform var(--motion-base) var(--ease-premium), visibility 0s; }
+}
+
+@media (max-width: 760px) {
+  .app, .app.sidebar-collapsed { transition: none; }
+  .sidebar { transition: transform var(--motion-slow) var(--ease-premium); }
+  .scrim { transition: opacity var(--motion-base) var(--ease-premium), visibility 0s linear var(--motion-base); }
+  .drawer-open .scrim { transition: opacity var(--motion-base) var(--ease-premium), visibility 0s; }
+  .sidebar .folder-quick-actions { transition: none; }
+  .pane-editor { transition: transform var(--motion-slow) var(--ease-premium); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

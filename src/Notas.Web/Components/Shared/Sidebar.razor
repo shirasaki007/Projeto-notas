@@ -313,7 +313,7 @@
     private Guid? _draggedFolderId, _dropTargetFolderId, _justReorderedFolderId;
     private Guid? _lastDraggedNoteId;
     private string _newFolder = "";
-    private string _newFolderColor = "#5646e0";
+    private string _newFolderColor = "#8b5cf6";
     private string _renamingFolderName = "";
     private string _sidebarStatus = "";
     private SidebarOrganization _organization = new();
@@ -332,7 +332,7 @@
 
     private record NavItem(NoteView View, string Icon, string Label, int Count);
     private static readonly string[] FolderIconOptions = ["folder", "notes", "star", "pin", "tag", "sparkle", "archive"];
-    private static readonly string[] FolderColorOptions = ["#5646e0", "#2f9e6b", "#2d8fd5", "#e08a1e", "#d9534f", "#c2409b", "#7a8794"];
+    private static readonly string[] FolderColorOptions = ["#8b5cf6", "#2f9e6b", "#2d8fd5", "#e08a1e", "#d9534f", "#c2409b", "#7a8794"];
     private NavItem[] Items => [
         new(NoteView.All, "notes", "Todas as notas", Counts.All),
         new(NoteView.Pinned, "pin", "Fixadas", Counts.Pinned),
@@ -389,7 +389,7 @@
             ? icon : "folder";
     private string GetFolderColor(FolderDto folder) =>
         _organization.FolderColors.TryGetValue(folder.Id.ToString("D"), out var color) && IsValidColor(color)
-            ? color : IsValidColor(folder.Color) ? folder.Color! : "#5646e0";
+            ? color : IsValidColor(folder.Color) ? folder.Color! : "#8b5cf6";
     private static bool IsValidColor(string? color) =>
         color is { Length: 7 } && color[0] == '#' && color.Skip(1).All(Uri.IsHexDigit);
     private static string FolderIconLabel(string icon) => icon switch
@@ -410,7 +410,7 @@
         "#d9534f" => "vermelha",
         "#c2409b" => "rosa",
         "#7a8794" => "cinza",
-        _ => "índigo"
+        _ => "roxo"
     };
 
     private void StartAdd()
