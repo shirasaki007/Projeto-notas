@@ -231,6 +231,32 @@
         if (_status is SaveStatus.Dirty or SaveStatus.Error) await SaveAsync();
     }
 
+    public async Task<bool> MoveToFolderAsync(Guid folderId)
+    {
+        if (_disposed || _readOnly || Note.IsArchived || _status == SaveStatus.Conflict) return false;
+        if (!await SavePendingChangesAsync()) return false;
+        if (_folderId == folderId) return true;
+
+        _folderId = folderId;
+        MarkDirty();
+        return await SavePendingChangesAsync();
+    }
+
+    public Guid? CurrentFolderId => _folderId;
+
+    private async Task<bool> SavePendingChangesAsync()
+    {
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            await FlushAsync();
+            await _gate.WaitAsync();
+            _gate.Release();
+            if (_status == SaveStatus.Saved) return true;
+            if (_status is SaveStatus.Error or SaveStatus.Conflict) return false;
+        }
+        return false;
+    }
+
     private async Task SaveAsync()
     {
         await _gate.WaitAsync();

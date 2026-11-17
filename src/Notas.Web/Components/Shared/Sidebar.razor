@@ -1,70 +1,282 @@
 @inject IJSRuntime JS
 
-<aside class="pane sidebar" aria-label="Navegação principal">
+<aside id="primary-sidebar" class="pane sidebar" aria-label="Navegação principal" @onclick="CloseFolderMenu">
+    <p class="sr-only" role="status" aria-live="polite">@_sidebarStatus</p>
     <div class="sidebar-head">
-        <a class="brand" href="/" data-enhance-nav="false"><span class="brand-mark"><Icon Name="notes" Size="16" /></span> Notas</a>
-        <button class="icon-btn" @onclick="ToggleTheme" aria-label="Alternar entre tema claro e escuro" title="Alternar tema">
+        <a class="brand" href="/" data-enhance-nav="false"><span class="brand-mark"><Icon Name="notes" Size="16" /></span><span class="sidebar-label brand-label">Notas</span></a>
+        <button class="icon-btn theme-toggle" @onclick="ToggleTheme" aria-label="Alternar entre tema claro e escuro" data-tooltip="Alternar tema">
             <span class="when-light"><Icon Name="moon" /></span><span class="when-dark"><Icon Name="sun" /></span>
+        </button>
+        <button class="icon-btn sidebar-toggle" @onclick="OnToggleCollapse"
+                aria-label="@(Collapsed ? "Expandir barra lateral" : "Recolher barra lateral")"
+                aria-controls="primary-sidebar" aria-expanded="@(Collapsed ? "false" : "true")"
+                data-tooltip="@(Collapsed ? "Expandir barra lateral" : "Recolher barra lateral")">
+            <Icon Name="chevron-left" Size="16" />
         </button>
         <button class="icon-btn drawer-close" @onclick="OnClose" aria-label="Fechar menu"><Icon Name="x" /></button>
     </div>
 
-    <button class="btn btn-primary btn-block new-note" @onclick="OnNewNote"><Icon Name="plus" Size="16" /> Nova nota</button>
+    <button class="btn btn-primary btn-block new-note" @onclick="OnNewNote" data-tooltip="Nova nota">
+        <Icon Name="plus" Size="16" /><span class="sidebar-label">Nova nota</span>
+    </button>
+
+    <div class="sidebar-search">
+        <Icon Name="search" Size="16" />
+        <input @ref="_searchInput" type="search" value="@SearchText" placeholder="Buscar notas, pastas e tags"
+               autocomplete="off" aria-label="Buscar notas, pastas e tags" @oninput="SearchInput" />
+        @if (!string.IsNullOrWhiteSpace(SearchText))
+        {
+            <button class="icon-btn sidebar-search-clear" @onclick="ClearSearch" aria-label="Limpar busca">
+                <Icon Name="x" Size="14" />
+            </button>
+        }
+    </div>
+    <button class="icon-btn sidebar-search-trigger @(string.IsNullOrWhiteSpace(SearchText) ? "" : "is-on")"
+            @onclick="ExpandAndFocusSearch" aria-label="Abrir busca da barra lateral" data-tooltip="Buscar">
+        <Icon Name="search" Size="16" />
+    </button>
 
     <nav class="nav" aria-label="Visões">
-        @foreach (var item in Items)
+        @foreach (var item in VisibleItems)
         {
             var active = View == item.View && FolderId is null && TagId is null;
-            <button class="nav-item @(active ? "active" : "")" aria-current="@(active ? "page" : null)" @onclick="() => OnView.InvokeAsync(item.View)">
-                <Icon Name="@item.Icon" Size="17" /><span class="grow">@item.Label</span>
-                @if (item.Count > 0) { <span class="count">@item.Count</span> }
+            var favorite = item.View == NoteView.Favorites;
+            <button class="nav-item @(active ? "active" : "") @(favorite ? "favorite-item" : "")" aria-current="@(active ? "page" : null)"
+                    data-tooltip="@item.Label" @onclick="() => OnView.InvokeAsync(item.View)">
+                <Icon Name="@item.Icon" Size="17" /><span class="grow sidebar-label">@item.Label</span>
+                @if (item.Count > 0) { <span class="count" @key="item.Count">@item.Count</span> }
             </button>
+        }
+        @if (SearchActive && VisibleItems.Count == 0)
+        {
+            <p class="nav-hint">Nenhuma visão encontrada.</p>
         }
     </nav>
 
-    <div class="nav-section">
+    <section class="nav-section recent-section" aria-labelledby="sidebar-recent-heading">
         <div class="nav-section-head">
-            <h2>Pastas</h2>
-            <button class="icon-btn icon-btn-sm" @onclick="StartAdd" aria-label="Nova pasta" title="Nova pasta"><Icon Name="plus" Size="14" /></button>
+            <h2 id="sidebar-recent-heading"><span class="sidebar-label">Recentes</span></h2>
         </div>
-        @if (_adding)
-        {
-            <input class="inline-input" @ref="_folderInput" placeholder="Nome da pasta" maxlength="60" aria-label="Nome da nova pasta"
-                   @bind="_newFolder" @bind:event="oninput" @onkeydown="OnFolderKey" @onblur="CancelAdd" />
-        }
-        @foreach (var f in Folders)
-        {
-            <div class="nav-row @(FolderId == f.Id ? "active" : "")" @key="f.Id">
-                <button class="nav-item" aria-current="@(FolderId == f.Id ? "page" : null)" @onclick="() => OnFolder.InvokeAsync(f.Id)">
-                    <span class="dot" style="background:@f.Color"></span><span class="grow ellipsis">@f.Name</span>
-                    @if (f.NoteCount > 0) { <span class="count">@f.NoteCount</span> }
-                </button>
-                <button class="icon-btn icon-btn-sm row-action" @onclick="() => OnDeleteFolder.InvokeAsync(f.Id)" aria-label="Excluir pasta @f.Name"><Icon Name="trash" Size="13" /></button>
-            </div>
-        }
-        @if (Folders.Count == 0 && !_adding) { <p class="nav-hint">Agrupe suas notas em pastas.</p> }
-    </div>
-
-    <div class="nav-section">
-        <div class="nav-section-head"><h2>Tags</h2></div>
-        <div class="tag-cloud">
-            @foreach (var t in Tags)
+        <div class="nav recent-list">
+            @foreach (var note in VisibleRecentNotes)
             {
-                <button class="chip chip-btn @(TagId == t.Id ? "active" : "")" @key="t.Id" aria-pressed="@(TagId == t.Id ? "true" : "false")"
-                        @onclick="() => OnTag.InvokeAsync(t.Id)">#@t.Name <span class="chip-count">@t.NoteCount</span></button>
+                var title = string.IsNullOrWhiteSpace(note.Title) ? "Sem título" : note.Title;
+                var recentPinned = IsRecentPinned(note.Id);
+                <div class="nav-row recent-row @(SelectedId == note.Id ? "active" : "")" @key="note.Id">
+                    <button class="nav-item recent-note @(SelectedId == note.Id ? "active" : "")"
+                            aria-current="@(SelectedId == note.Id ? "true" : null)"
+                            aria-label="Abrir nota @title" data-tooltip="@title"
+                            @onclick="() => OnSelectNote.InvokeAsync(note.Id)">
+                        <Icon Name="file" Size="16" /><span class="grow ellipsis sidebar-label">@title</span>
+                    </button>
+                    @if (note.IsFavorite)
+                    {
+                        <button class="icon-btn icon-btn-sm recent-pin @(recentPinned ? "is-on" : "")"
+                                @onclick="() => ToggleRecentPinAsync(note.Id)" @onclick:stopPropagation="true"
+                                aria-label="@(recentPinned ? $"Desafixar {title} dos recentes" : $"Fixar {title} nos recentes")"
+                                aria-pressed="@recentPinned" data-tooltip="@(recentPinned ? "Desafixar dos recentes" : "Fixar nos recentes")">
+                            <Icon Name="pin" Size="13" />
+                        </button>
+                    }
+                </div>
             }
-            @if (Tags.Count == 0) { <p class="nav-hint">As tags das suas notas aparecem aqui.</p> }
+            @if (RecentNotesError is not null)
+            {
+                <p class="nav-hint">@RecentNotesError</p>
+            }
+            else if (VisibleRecentNotes.Count == 0)
+            {
+                <p class="nav-hint">@(SearchActive ? "Nenhuma nota recente encontrada." : "Suas notas recentes aparecerão aqui.")</p>
+            }
         </div>
-    </div>
+    </section>
+
+    <section class="nav-section" aria-labelledby="sidebar-folders-heading">
+        <div class="nav-section-head">
+            <h2 id="sidebar-folders-heading"><span class="sidebar-label">Pastas</span></h2>
+            <div class="section-actions">
+                <button class="icon-btn icon-btn-sm section-toggle" @onclick="ToggleFolders"
+                        aria-label="@(ShowFolders ? "Recolher pastas" : "Expandir pastas")"
+                        aria-expanded="@ShowFolders" aria-controls="sidebar-folders-list"
+                        data-tooltip="@(ShowFolders ? "Recolher pastas" : "Expandir pastas")" disabled="@SearchActive">
+                    <Icon Name="chevron-down" Size="14" />
+                </button>
+                <button class="icon-btn icon-btn-sm" @onclick="StartAdd" aria-label="Nova pasta" aria-expanded="@_adding" data-tooltip="Nova pasta"><Icon Name="plus" Size="14" /></button>
+            </div>
+        </div>
+        <div id="sidebar-folders-list" class="section-content" aria-hidden="@(!ShowFolders)">
+            @if (ShowFolders)
+            {
+                <div class="section-content-enter">
+                    @if (_adding)
+                    {
+                        <div class="folder-create-row">
+                            <input id="new-folder-input" class="inline-input" @ref="_folderInput" placeholder="Nome da pasta" maxlength="60" aria-label="Nome da nova pasta"
+                                   @bind="_newFolder" @bind:event="oninput" @onkeydown="OnFolderKey" />
+                            <input class="folder-create-color" type="color" value="@_newFolderColor"
+                                   aria-label="Cor da nova pasta" @onchange="e => SetNewFolderColor(e.Value?.ToString())" />
+                            <button class="icon-btn icon-btn-sm" @onclick="CreateFolderFromInputAsync" aria-label="Criar pasta">
+                                <Icon Name="check" Size="14" />
+                            </button>
+                            <button class="icon-btn icon-btn-sm" @onclick="CancelAdd" aria-label="Cancelar criação da pasta">
+                                <Icon Name="x" Size="14" />
+                            </button>
+                        </div>
+                    }
+                    @foreach (var f in VisibleFolders)
+                    {
+                        <div class="nav-row folder-row @(FolderId == f.Id ? "active" : "") @(_openFolderMenuId == f.Id ? "menu-open" : "") @(DraggedNoteId is not null ? "note-drop-available" : "") @(_dropTargetFolderId == f.Id && (DraggedNoteId is not null || _draggedFolderId is not null) ? "drop-target" : "") @(_draggedFolderId == f.Id ? "is-dragging" : "") @(_justReorderedFolderId == f.Id ? "folder-reordered" : "")"
+                             @key="f.Id" @ondragenter="() => SetFolderDropTarget(f.Id)"
+                             @ondragover:preventDefault="true" @ondrop="() => HandleFolderDropAsync(f.Id)">
+                            @if (_renamingFolderId == f.Id)
+                            {
+                                <input class="inline-input folder-rename-input" @ref="_renameInput" maxlength="60"
+                                       aria-label="Renomear pasta @f.Name" @bind="_renamingFolderName" @bind:event="oninput"
+                                       @onkeydown="e => OnRenameFolderKey(f.Id, e)" @onblur="CancelRename" />
+                            }
+                            else
+                            {
+                                <button class="nav-item folder-nav-item" aria-current="@(FolderId == f.Id ? "page" : null)"
+                                        aria-label="@($"{f.Name}, {f.NoteCount} notas. Solte uma nota para movê-la para esta pasta.")"
+                                        data-tooltip="@f.Name" @onclick="() => SelectFolderAsync(f.Id)">
+                                    <span class="folder-icon" style="@($"color:{GetFolderColor(f)}")"><Icon Name="@GetFolderIcon(f)" Size="16" /></span>
+                                    <span class="grow ellipsis sidebar-label">@f.Name</span>
+                                    @if (f.NoteCount > 0) { <span class="count" @key="f.NoteCount">@f.NoteCount</span> }
+                                </button>
+                            }
+                            @if (_renamingFolderId != f.Id)
+                            {
+                                <div class="folder-quick-actions">
+                                    <span class="folder-drag-handle" draggable="true" role="img"
+                                            @ondragstart="() => StartFolderDrag(f.Id)" @ondragend="EndFolderDrag"
+                                            aria-label="Arraste para reordenar pasta @f.Name" data-tooltip="Arraste para reordenar">
+                                        <Icon Name="grip" Size="13" />
+                                    </span>
+                                    <button class="icon-btn icon-btn-sm" @onclick="() => OnNewNoteInFolder.InvokeAsync(f.Id)"
+                                            aria-label="Nova nota em @f.Name" data-tooltip="Nova nota">
+                                        <Icon Name="plus" Size="13" />
+                                    </button>
+                                    <button id="@($"folder-menu-trigger-{f.Id:N}")" class="icon-btn icon-btn-sm folder-menu-trigger" @onclick="() => ToggleFolderMenu(f.Id)"
+                                            @onclick:stopPropagation="true"
+                                            @onkeydown="e => OnFolderMenuKeyDown(f.Id, e)" @onkeydown:stopPropagation="true"
+                                            aria-label="Mais opções para @f.Name"
+                                            aria-expanded="@(_openFolderMenuId == f.Id)" aria-controls="@($"folder-menu-{f.Id:N}")"
+                                            data-tooltip="Mais opções">
+                                        <Icon Name="more-vertical" Size="14" />
+                                    </button>
+                                </div>
+                            }
+                            @if (_openFolderMenuId == f.Id)
+                            {
+                                <div class="folder-context-menu" id="@($"folder-menu-{f.Id:N}")" role="group"
+                                     aria-label="Opções da pasta @f.Name" @onkeydown="e => OnFolderMenuKeyDown(f.Id, e)"
+                                     @onkeydown:stopPropagation="true" @onclick:stopPropagation="true">
+                                    <button class="folder-menu-item" @onclick="() => MoveFolderAsync(f.Id, -1)" disabled="@(FolderIndex(f.Id) == 0)">
+                                        <Icon Name="chevron-up" Size="14" /> Mover para cima
+                                    </button>
+                                    <button class="folder-menu-item" @onclick="() => MoveFolderAsync(f.Id, 1)" disabled="@(FolderIndex(f.Id) == OrderedFolders.Count - 1)">
+                                        <Icon Name="chevron-down" Size="14" /> Mover para baixo
+                                    </button>
+                                    <button class="folder-menu-item" @onclick="() => ToggleFolderCustomization(f.Id)"
+                                            aria-expanded="@(_customizingFolderId == f.Id)" aria-controls="@($"folder-customizer-{f.Id:N}")">
+                                        <Icon Name="sparkle" Size="14" /> Personalizar pasta
+                                    </button>
+                                    @if (_customizingFolderId == f.Id)
+                                    {
+                                        <div class="folder-customizer" id="@($"folder-customizer-{f.Id:N}")" role="group" aria-label="Personalização da pasta @f.Name">
+                                            <span class="customizer-label">Ícone</span>
+                                            <div class="folder-icon-options">
+                                                @foreach (var icon in FolderIconOptions)
+                                                {
+                                                    <button class="icon-btn icon-btn-sm folder-icon-choice" @key="icon"
+                                                            @onclick="() => SetFolderIconAsync(f.Id, icon)"
+                                                            aria-label="@($"Ícone {FolderIconLabel(icon)}")"
+                                                            aria-pressed="@(GetFolderIcon(f) == icon)">
+                                                        <Icon Name="@icon" Size="14" />
+                                                    </button>
+                                                }
+                                            </div>
+                                            <span class="customizer-label">Cor</span>
+                                            <div class="folder-color-options">
+                                                @foreach (var color in FolderColorOptions)
+                                                {
+                                                    <button class="folder-color-choice" @key="color" style="@($"--folder-color:{color}")"
+                                                            @onclick="() => SetFolderColorAsync(f.Id, color)"
+                                                            aria-label="@($"Definir cor {FolderColorLabel(color)}")"
+                                                            aria-pressed="@(GetFolderColor(f) == color)"></button>
+                                                }
+                                                <label class="custom-folder-color">
+                                                    <span class="sr-only">Cor personalizada</span>
+                                                    <input type="color" value="@GetFolderColor(f)" aria-label="Cor personalizada da pasta @f.Name"
+                                                           @onchange="e => SetFolderColorAsync(f.Id, e.Value?.ToString())" />
+                                                </label>
+                                            </div>
+                                        </div>
+                                    }
+                                    <button class="folder-menu-item" @onclick="() => StartRename(f)">
+                                        <Icon Name="edit" Size="14" /> Renomear
+                                    </button>
+                                    <button class="folder-menu-item folder-menu-danger" @onclick="() => DeleteFolderFromMenu(f.Id)">
+                                        <Icon Name="trash" Size="14" /> Excluir pasta
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    }
+                    @if (VisibleFolders.Count == 0 && !_adding)
+                    {
+                        <p class="nav-hint">@(SearchActive ? "Nenhuma pasta encontrada." : "Agrupe suas notas em pastas.")</p>
+                    }
+                </div>
+            }
+        </div>
+    </section>
+
+    <section class="nav-section tags-section" aria-labelledby="sidebar-tags-heading">
+        <div class="nav-section-head">
+            <h2 id="sidebar-tags-heading"><span class="sidebar-label">Tags</span></h2>
+            <button class="icon-btn icon-btn-sm section-toggle" @onclick="ToggleTags"
+                    aria-label="@(ShowTags ? "Recolher tags" : "Expandir tags")"
+                    aria-expanded="@ShowTags" aria-controls="sidebar-tags-list"
+                    data-tooltip="@(ShowTags ? "Recolher tags" : "Expandir tags")" disabled="@SearchActive">
+                <Icon Name="chevron-down" Size="14" />
+            </button>
+        </div>
+        <div id="sidebar-tags-list" class="section-content" aria-hidden="@(!ShowTags)">
+            @if (ShowTags)
+            {
+                <div class="section-content-enter">
+                    <div class="tag-cloud">
+                        @foreach (var t in VisibleTags)
+                        {
+                            <button class="chip chip-btn @(TagId == t.Id ? "active" : "")" @key="t.Id"
+                                    aria-pressed="@(TagId == t.Id ? "true" : "false")" aria-label="@($"Tag {t.Name}, {t.NoteCount} notas")"
+                                    data-tooltip="@($"#{t.Name}, {t.NoteCount} notas")" @onclick="() => OnTag.InvokeAsync(t.Id)">
+                                <Icon Name="tag" Size="15" /><span class="sidebar-label">@t.Name</span><span class="chip-count" @key="t.NoteCount">@t.NoteCount</span>
+                            </button>
+                        }
+                        @if (VisibleTags.Count == 0)
+                        {
+                            <p class="nav-hint">@(SearchActive ? "Nenhuma tag encontrada." : "As tags das suas notas aparecem aqui.")</p>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </section>
 
     <div class="sidebar-foot">
         <AuthorizeView>
             <Authorized>
-                <div class="user" title="@context.User.Identity?.Name"><Icon Name="user" Size="16" /><span class="ellipsis">@context.User.Identity?.Name</span></div>
+                <div class="user" data-tooltip="@context.User.Identity?.Name"><Icon Name="user" Size="16" /><span class="ellipsis sidebar-label">@context.User.Identity?.Name</span></div>
             </Authorized>
         </AuthorizeView>
-        <a class="foot-link" href="/account/manage" data-enhance-nav="false">Conta</a>
-        <a class="foot-link" href="/account/logout" data-enhance-nav="false"><Icon Name="logout" Size="14" /> Sair</a>
+        <a class="foot-link" href="/account/manage" data-enhance-nav="false" aria-label="Conta" data-tooltip="Conta">
+            <Icon Name="user" Size="14" /><span class="sidebar-label">Conta</span>
+        </a>
+        <a class="foot-link" href="/account/logout" data-enhance-nav="false" aria-label="Sair" data-tooltip="Sair">
+            <Icon Name="logout" Size="14" /><span class="sidebar-label">Sair</span>
+        </a>
     </div>
 </aside>
 
@@ -72,22 +284,55 @@
     [Parameter] public NoteCounts Counts { get; set; } = new(0, 0, 0, 0, 0);
     [Parameter] public IReadOnlyList<FolderDto> Folders { get; set; } = [];
     [Parameter] public IReadOnlyList<TagDto> Tags { get; set; } = [];
+    [Parameter] public IReadOnlyList<NoteListItemDto> RecentNotes { get; set; } = [];
+    [Parameter] public Guid? DraggedNoteId { get; set; }
+    [Parameter] public string? RecentNotesError { get; set; }
+    [Parameter] public Guid? SelectedId { get; set; }
+    [Parameter] public string SearchText { get; set; } = "";
+    [Parameter] public bool Collapsed { get; set; }
     [Parameter] public NoteView View { get; set; }
     [Parameter] public Guid? FolderId { get; set; }
     [Parameter] public Guid? TagId { get; set; }
     [Parameter] public EventCallback<NoteView> OnView { get; set; }
     [Parameter] public EventCallback<Guid> OnFolder { get; set; }
     [Parameter] public EventCallback<Guid> OnTag { get; set; }
-    [Parameter] public EventCallback<string> OnCreateFolder { get; set; }
+    [Parameter] public EventCallback<(string Name, string Color)> OnCreateFolder { get; set; }
+    [Parameter] public EventCallback<(Guid Id, string Name)> OnRenameFolder { get; set; }
     [Parameter] public EventCallback<Guid> OnDeleteFolder { get; set; }
+    [Parameter] public EventCallback<(Guid NoteId, Guid FolderId)> OnMoveNoteToFolder { get; set; }
+    [Parameter] public EventCallback<Guid> OnNewNoteInFolder { get; set; }
+    [Parameter] public EventCallback<Guid> OnSelectNote { get; set; }
     [Parameter] public EventCallback OnNewNote { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnToggleCollapse { get; set; }
+    [Parameter] public EventCallback<string> OnSearch { get; set; }
 
-    private bool _adding, _focusInput;
+    private bool _adding, _focusInput, _focusSearch, _focusRename;
+    private bool _foldersExpanded = true, _tagsExpanded = true;
+    private Guid? _openFolderMenuId, _renamingFolderId, _customizingFolderId;
+    private Guid? _draggedFolderId, _dropTargetFolderId, _justReorderedFolderId;
+    private Guid? _lastDraggedNoteId;
     private string _newFolder = "";
+    private string _newFolderColor = "#5646e0";
+    private string _renamingFolderName = "";
+    private string _sidebarStatus = "";
+    private SidebarOrganization _organization = new();
     private ElementReference _folderInput;
+    private ElementReference _renameInput;
+    private ElementReference _searchInput;
+
+    public sealed class SidebarOrganization
+    {
+        public SidebarOrganization() { }
+        public List<string> FolderOrder { get; set; } = [];
+        public Dictionary<string, string> FolderIcons { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string> FolderColors { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+        public List<string> PinnedRecentNoteIds { get; set; } = [];
+    }
 
     private record NavItem(NoteView View, string Icon, string Label, int Count);
+    private static readonly string[] FolderIconOptions = ["folder", "notes", "star", "pin", "tag", "sparkle", "archive"];
+    private static readonly string[] FolderColorOptions = ["#5646e0", "#2f9e6b", "#2d8fd5", "#e08a1e", "#d9534f", "#c2409b", "#7a8794"];
     private NavItem[] Items => [
         new(NoteView.All, "notes", "Todas as notas", Counts.All),
         new(NoteView.Pinned, "pin", "Fixadas", Counts.Pinned),
@@ -96,21 +341,289 @@
         new(NoteView.Trash, "trash", "Lixeira", Counts.Trash)
     ];
 
-    private void StartAdd() { _adding = true; _focusInput = true; _newFolder = ""; }
+    private bool SearchActive => !string.IsNullOrWhiteSpace(SearchText);
+    private string SearchTerm => SearchText.Trim();
+    private IReadOnlyList<NavItem> VisibleItems => Items.Where(item => Matches(item.Label)).ToArray();
+    private IReadOnlyList<FolderDto> OrderedFolders => Folders
+        .OrderBy(FolderOrderIndex)
+        .ThenBy(folder => folder.Name, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+    private IReadOnlyList<FolderDto> VisibleFolders => OrderedFolders.Where(folder => Matches(folder.Name)).ToArray();
+    private IReadOnlyList<TagDto> VisibleTags => Tags.Where(tag => Matches(tag.Name)).ToArray();
+    private IReadOnlyList<NoteListItemDto> VisibleRecentNotes
+    {
+        get
+        {
+            var matches = RecentNotes.Where(note =>
+                Matches(note.Title) || Matches(note.Snippet) || Matches(note.FolderName) || note.Tags.Any(Matches)).ToArray();
+            var pinned = matches.Where(note => note.IsFavorite && IsRecentPinned(note.Id))
+                .OrderBy(note => _organization.PinnedRecentNoteIds.IndexOf(note.Id.ToString("D")));
+            var pinnedIds = pinned.Select(note => note.Id).ToHashSet();
+            return pinned.Concat(matches.Where(note => !pinnedIds.Contains(note.Id))
+                .OrderByDescending(note => note.UpdatedAt).Take(4)).ToArray();
+        }
+    }
+    private bool ShowFolders => _foldersExpanded || SearchActive;
+    private bool ShowTags => _tagsExpanded || SearchActive;
+
+    protected override void OnParametersSet()
+    {
+        if (DraggedNoteId != _lastDraggedNoteId) _dropTargetFolderId = null;
+        if (DraggedNoteId is null && _draggedFolderId is null) _dropTargetFolderId = null;
+        _lastDraggedNoteId = DraggedNoteId;
+    }
+
+    private bool Matches(string? value) =>
+        !SearchActive || value?.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) == true;
+
+    private int FolderOrderIndex(FolderDto folder)
+    {
+        var index = _organization.FolderOrder.IndexOf(folder.Id.ToString("D"));
+        return index < 0 ? int.MaxValue : index;
+    }
+
+    private int FolderIndex(Guid id) => OrderedFolders.ToList().FindIndex(folder => folder.Id == id);
+    private bool IsRecentPinned(Guid id) => _organization.PinnedRecentNoteIds.Contains(id.ToString("D"), StringComparer.OrdinalIgnoreCase);
+    private string GetFolderIcon(FolderDto folder) =>
+        _organization.FolderIcons.TryGetValue(folder.Id.ToString("D"), out var icon) && FolderIconOptions.Contains(icon)
+            ? icon : "folder";
+    private string GetFolderColor(FolderDto folder) =>
+        _organization.FolderColors.TryGetValue(folder.Id.ToString("D"), out var color) && IsValidColor(color)
+            ? color : IsValidColor(folder.Color) ? folder.Color! : "#5646e0";
+    private static bool IsValidColor(string? color) =>
+        color is { Length: 7 } && color[0] == '#' && color.Skip(1).All(Uri.IsHexDigit);
+    private static string FolderIconLabel(string icon) => icon switch
+    {
+        "notes" => "notas",
+        "star" => "estrela",
+        "pin" => "alfinete",
+        "tag" => "tag",
+        "sparkle" => "brilho",
+        "archive" => "arquivo",
+        _ => "pasta"
+    };
+    private static string FolderColorLabel(string color) => color switch
+    {
+        "#2f9e6b" => "verde",
+        "#2d8fd5" => "azul",
+        "#e08a1e" => "âmbar",
+        "#d9534f" => "vermelha",
+        "#c2409b" => "rosa",
+        "#7a8794" => "cinza",
+        _ => "índigo"
+    };
+
+    private void StartAdd()
+    {
+        _openFolderMenuId = null;
+        _customizingFolderId = null;
+        _foldersExpanded = true;
+        _adding = true;
+        _focusInput = true;
+        _newFolder = "";
+        _newFolderColor = FolderColorOptions[0];
+    }
     private void CancelAdd() { _adding = false; }
+    private void ToggleFolders() { _foldersExpanded = !_foldersExpanded; _openFolderMenuId = null; if (!_foldersExpanded) _adding = false; }
+    private void ToggleTags() => _tagsExpanded = !_tagsExpanded;
+    private void ToggleFolderMenu(Guid id)
+    {
+        _customizingFolderId = null;
+        _openFolderMenuId = _openFolderMenuId == id ? null : id;
+    }
+    private void CloseFolderMenu() { _openFolderMenuId = null; _customizingFolderId = null; }
+    private Task SelectFolderAsync(Guid id) { _openFolderMenuId = null; return OnFolder.InvokeAsync(id); }
+    private Task DeleteFolderFromMenu(Guid id) { _openFolderMenuId = null; return OnDeleteFolder.InvokeAsync(id); }
+    private void StartRename(FolderDto folder) { _openFolderMenuId = null; _customizingFolderId = null; _renamingFolderId = folder.Id; _renamingFolderName = folder.Name; _foldersExpanded = true; _focusRename = true; }
+    private void CancelRename() => _renamingFolderId = null;
+
+    private void SetNewFolderColor(string? color)
+    {
+        if (IsValidColor(color)) _newFolderColor = color!;
+    }
+
+    private async Task SetFolderIconAsync(Guid id, string icon)
+    {
+        _organization.FolderIcons[id.ToString("D")] = icon;
+        _sidebarStatus = $"Ícone da pasta {Folders.FirstOrDefault(folder => folder.Id == id)?.Name ?? ""} atualizado.";
+        await SaveOrganizationAsync();
+    }
+
+    private async Task SetFolderColorAsync(Guid id, string? color)
+    {
+        if (!IsValidColor(color)) return;
+        _organization.FolderColors[id.ToString("D")] = color!;
+        _sidebarStatus = $"Cor da pasta {Folders.FirstOrDefault(folder => folder.Id == id)?.Name ?? ""} atualizada.";
+        await SaveOrganizationAsync();
+    }
+
+    private void ToggleFolderCustomization(Guid id)
+    {
+        _customizingFolderId = _customizingFolderId == id ? null : id;
+    }
+
+    private async Task ToggleRecentPinAsync(Guid id)
+    {
+        var note = RecentNotes.FirstOrDefault(item => item.Id == id);
+        if (note?.IsFavorite != true) return;
+
+        var key = id.ToString("D");
+        if (IsRecentPinned(id)) _organization.PinnedRecentNoteIds.RemoveAll(value => string.Equals(value, key, StringComparison.OrdinalIgnoreCase));
+        else _organization.PinnedRecentNoteIds.Insert(0, key);
+        _sidebarStatus = IsRecentPinned(id) ? "Nota fixada no topo dos recentes." : "Nota desafixada dos recentes.";
+        await SaveOrganizationAsync();
+    }
+
+    private void SetFolderDropTarget(Guid id)
+    {
+        if (DraggedNoteId is not null || _draggedFolderId is not null) _dropTargetFolderId = id;
+    }
+
+    private void StartFolderDrag(Guid id)
+    {
+        _draggedFolderId = id;
+        _dropTargetFolderId = null;
+    }
+
+    private void EndFolderDrag()
+    {
+        _draggedFolderId = null;
+        _dropTargetFolderId = null;
+    }
+
+    private async Task HandleFolderDropAsync(Guid targetId)
+    {
+        if (_draggedFolderId is Guid sourceId)
+        {
+            if (sourceId != targetId) await ReorderFolderByDropAsync(sourceId, targetId);
+            return;
+        }
+
+        if (DraggedNoteId is Guid noteId)
+            await OnMoveNoteToFolder.InvokeAsync((noteId, targetId));
+        _dropTargetFolderId = null;
+    }
+
+    private async Task MoveFolderAsync(Guid id, int offset)
+    {
+        var order = OrderedFolders.Select(folder => folder.Id.ToString("D")).ToList();
+        var current = order.IndexOf(id.ToString("D"));
+        var target = current + offset;
+        if (current < 0 || target < 0 || target >= order.Count) return;
+        (order[current], order[target]) = (order[target], order[current]);
+        _organization.FolderOrder = order;
+        await PersistFolderOrderAsync(id);
+    }
+
+    private async Task ReorderFolderByDropAsync(Guid sourceId, Guid targetId)
+    {
+        var order = OrderedFolders.Select(folder => folder.Id.ToString("D")).ToList();
+        var sourceIndex = order.IndexOf(sourceId.ToString("D"));
+        var targetIndex = order.IndexOf(targetId.ToString("D"));
+        if (sourceIndex < 0 || targetIndex < 0 || sourceIndex == targetIndex) return;
+        order.RemoveAt(sourceIndex);
+        targetIndex = order.IndexOf(targetId.ToString("D"));
+        order.Insert(targetIndex, sourceId.ToString("D"));
+        _organization.FolderOrder = order;
+        _dropTargetFolderId = null;
+        _draggedFolderId = null;
+        await PersistFolderOrderAsync(sourceId);
+    }
+
+    private async Task PersistFolderOrderAsync(Guid movedId)
+    {
+        _justReorderedFolderId = movedId;
+        var index = FolderIndex(movedId);
+        var folderName = Folders.FirstOrDefault(folder => folder.Id == movedId)?.Name ?? "Pasta";
+        _sidebarStatus = $"{folderName} movida para a posição {index + 1}.";
+        await SaveOrganizationAsync();
+        await InvokeAsync(StateHasChanged);
+        await Task.Delay(220);
+        if (_justReorderedFolderId == movedId)
+        {
+            _justReorderedFolderId = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task SaveOrganizationAsync() =>
+        await JS.InvokeVoidAsync("notas.saveSidebarOrganization", _organization);
+
+    private void NormalizeOrganization()
+    {
+        var validIds = Folders.Select(folder => folder.Id.ToString("D")).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var folderOrder = _organization.FolderOrder
+            .Where(validIds.Contains)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        folderOrder.AddRange(Folders.OrderBy(folder => folder.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(folder => folder.Id.ToString("D"))
+            .Where(id => !folderOrder.Contains(id, StringComparer.OrdinalIgnoreCase)));
+        _organization.FolderOrder = folderOrder;
+
+        foreach (var id in _organization.FolderIcons.Keys.Where(id => !validIds.Contains(id) || !FolderIconOptions.Contains(_organization.FolderIcons[id])).ToArray())
+            _organization.FolderIcons.Remove(id);
+        foreach (var id in _organization.FolderColors.Keys.Where(id => !validIds.Contains(id) || !IsValidColor(_organization.FolderColors[id])).ToArray())
+            _organization.FolderColors.Remove(id);
+        _organization.PinnedRecentNoteIds = _organization.PinnedRecentNoteIds
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private async Task OnRenameFolderKey(Guid id, KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") { CancelRename(); return; }
+        if (e.Key == "Enter") await SaveRenameAsync(id);
+    }
+
+    private async Task SaveRenameAsync(Guid id)
+    {
+        var name = _renamingFolderName.Trim();
+        if (name.Length == 0) return;
+        await OnRenameFolder.InvokeAsync((id, name));
+        _renamingFolderId = null;
+    }
+
+    private async Task OnFolderMenuKeyDown(Guid id, KeyboardEventArgs e)
+    {
+        if (e.Key != "Escape") return;
+        _openFolderMenuId = null;
+        _customizingFolderId = null;
+        await JS.InvokeVoidAsync("notas.focus", $"folder-menu-trigger-{id:N}");
+    }
+
+    private Task SearchInput(ChangeEventArgs e) => OnSearch.InvokeAsync(e.Value?.ToString() ?? "");
+    private Task ClearSearch() => OnSearch.InvokeAsync("");
+
+    private async Task ExpandAndFocusSearch()
+    {
+        _focusSearch = true;
+        await OnToggleCollapse.InvokeAsync();
+    }
 
     private async Task OnFolderKey(KeyboardEventArgs e)
     {
         if (e.Key == "Escape") { CancelAdd(); return; }
-        if (e.Key != "Enter") return;
+        if (e.Key == "Enter") await CreateFolderFromInputAsync();
+    }
+
+    private async Task CreateFolderFromInputAsync()
+    {
         var name = _newFolder.Trim();
         _adding = false;
-        if (name.Length > 0) await OnCreateFolder.InvokeAsync(name);
+        if (name.Length > 0) await OnCreateFolder.InvokeAsync((name, _newFolderColor));
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            _organization = await JS.InvokeAsync<SidebarOrganization>("notas.loadSidebarOrganization") ?? new();
+            NormalizeOrganization();
+            await InvokeAsync(StateHasChanged);
+        }
         if (_focusInput) { _focusInput = false; await _folderInput.FocusAsync(); }
+        if (_focusSearch) { _focusSearch = false; await _searchInput.FocusAsync(); }
+        if (_focusRename) { _focusRename = false; await _renameInput.FocusAsync(); }
     }
 
     private async Task ToggleTheme() => await JS.InvokeVoidAsync("notas.toggleTheme");

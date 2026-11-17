@@ -2,7 +2,7 @@
 @layout BlankLayout
 @attribute [Authorize]
 @rendermode RenderModes.Interactive
-@implements IDisposable
+@implements IAsyncDisposable
 @inject INoteService Notes
 @inject IFolderService FolderSvc
 @inject ITagService TagSvc
@@ -14,12 +14,20 @@
 <PageTitle>Notas</PageTitle>
 <a class="skip-link" href="#note-list">Ir para a lista de notas</a>
 
-<div class="app @(_drawerOpen ? "drawer-open" : "") @(_selected is not null ? "has-note" : "")">
-    <Sidebar Counts="_counts" Folders="_folders" Tags="_tags"
+<div class="app @(_sidebarCollapsed ? "sidebar-collapsed" : "") @(_drawerOpen ? "drawer-open" : "") @(_selected is not null ? "has-note" : "")"
+     @onkeydown="HandleWorkspaceKeyDown">
+    <Sidebar Counts="_counts" Folders="_folders" Tags="_tags" RecentNotes="_recentNotes" RecentNotesError="@_recentNotesError"
+             SelectedId="_selected?.Id" Collapsed="_sidebarCollapsed"
+             DraggedNoteId="_draggedNoteId" OnMoveNoteToFolder="MoveNoteToFolderAsync"
+             SearchText="@_sidebarSearchText" OnSearch="OnSearchAsync"
              View="_query.View" FolderId="_query.FolderId" TagId="_query.TagId"
              OnView="SetViewAsync" OnFolder="SetFolderAsync" OnTag="SetTagAsync"
-             OnCreateFolder="CreateFolderAsync" OnDeleteFolder="AskDeleteFolder"
-             OnNewNote="NewNoteAsync" OnClose="CloseDrawer" />
+             OnCreateFolder="CreateFolderAsync" OnRenameFolder="RenameFolderAsync" OnDeleteFolder="AskDeleteFolder"
+             OnNewNoteInFolder="NewNoteInFolderAsync" OnSelectNote="SelectRecentAsync"
+             OnNewNote="NewNoteAsync" OnClose="CloseDrawer" OnToggleCollapse="ToggleSidebar" />
+    <div class="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="Redimensionar barra lateral"
+         aria-controls="primary-sidebar" aria-valuemin="220" aria-valuemax="420" aria-valuenow="272"
+         aria-keyshortcuts="ArrowLeft ArrowRight" tabindex="0"></div>
     <div class="scrim" @onclick="CloseDrawer"></div>
 
     <section class="pane pane-list" aria-label="Lista de notas">
@@ -28,7 +36,7 @@
                   SelectedId="_selected?.Id"
                   OnSearch="OnSearchAsync" OnDates="OnDatesAsync" OnSelect="SelectAsync" OnNew="NewNoteAsync"
                   OnMenu="() => _drawerOpen = true" OnLoadMore="LoadMoreAsync" OnRetry="RetryAsync"
-                  OnEmptyTrash="AskEmptyTrash" />
+                  OnEmptyTrash="AskEmptyTrash" OnStartDrag="StartNoteDrag" OnEndDrag="EndNoteDrag" />
     </section>
 
     <section class="pane pane-editor" aria-label="Editor">
@@ -55,12 +63,16 @@
 
 @code {
     private sealed record ConfirmState(string Title, string Message, string ConfirmText, Func<Task> Action);
+    private sealed record SidebarPreferences(int Width, bool Collapsed);
 
     private NoteQuery _query = new();
     private List<NoteListItemDto> _notes = [];
+    private List<NoteListItemDto> _recentNotes = [];
     private int _total;
-    private bool _loading = true, _loadingMore, _drawerOpen;
-    private string? _error;
+    private bool _loading = true, _loadingMore, _drawerOpen, _sidebarCollapsed;
+    private Guid? _draggedNoteId;
+    private string _sidebarSearchText = "";
+    private string? _error, _recentNotesError;
     private NoteDetailDto? _selected;
     private Guid _editorKey = Guid.NewGuid();
     private NoteEditor? _editor;
@@ -68,6 +80,7 @@
     private IReadOnlyList<FolderDto> _folders = [];
     private IReadOnlyList<TagDto> _tags = [];
     private CancellationTokenSource? _searchCts;
+    private DotNetObjectReference<Workspace>? _sidebarInterop;
     private ConfirmState? _confirm;
 
     private bool HasMore => _notes.Count < _total;
@@ -88,7 +101,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await Task.WhenAll(ReloadListAsync(showSkeleton: true), ReloadSidebarAsync());
+        await Task.WhenAll(ReloadListAsync(showSkeleton: true), ReloadSidebarAsync(), ReloadRecentNotesAsync());
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -96,6 +109,10 @@
         if (!firstRender) return;
         try
         {
+            _sidebarInterop = DotNetObjectReference.Create(this);
+            var preferences = await JS.InvokeAsync<SidebarPreferences>("notas.loadSidebarPreferences");
+            _sidebarCollapsed = preferences.Collapsed;
+            await JS.InvokeVoidAsync("notas.initSidebarInteractions", _sidebarInterop);
             Clock.OffsetMinutes = await JS.InvokeAsync<int>("notas.tzOffset");
             StateHasChanged();
         }
@@ -136,9 +153,26 @@
         catch (Exception ex) { Logger.LogError(ex, "Falha ao carregar a barra lateral"); }
     }
 
+    private async Task ReloadRecentNotesAsync()
+    {
+        _recentNotesError = null;
+        try
+        {
+            var page = await Notes.ListAsync(new NoteQuery(PageSize: 100));
+            _recentNotes = page.Items
+                .OrderByDescending(note => note.UpdatedAt)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Falha ao carregar notas recentes");
+            _recentNotesError = "Não foi possível carregar as notas recentes.";
+        }
+    }
+
     private async Task RefreshAllAsync()
     {
-        await Task.WhenAll(ReloadListAsync(showSkeleton: false), ReloadSidebarAsync());
+        await Task.WhenAll(ReloadListAsync(showSkeleton: false), ReloadSidebarAsync(), ReloadRecentNotesAsync());
     }
 
     private Task RetryAsync() => ReloadListAsync(showSkeleton: true);
@@ -189,10 +223,11 @@
 
     private async Task OnSearchAsync(string value)
     {
+        _sidebarSearchText = value;
         _searchCts?.Cancel();
         _searchCts = new CancellationTokenSource();
         var token = _searchCts.Token;
-        try { await Task.Delay(300, token); } catch (OperationCanceledException) { return; }
+        try { await Task.Delay(180, token); } catch (OperationCanceledException) { return; }
 
         _query = _query with { Search = string.IsNullOrWhiteSpace(value) ? null : value.Trim(), Page = 1 };
         await ReloadListAsync(showSkeleton: false);
@@ -205,6 +240,30 @@
     }
 
     private void CloseDrawer() => _drawerOpen = false;
+    private async Task ToggleSidebar()
+    {
+        _sidebarCollapsed = !_sidebarCollapsed;
+        await JS.InvokeVoidAsync("notas.saveSidebarPreferences", _sidebarCollapsed);
+    }
+
+    [JSInvokable]
+    public Task SetSidebarCollapsedFromShortcutAsync(bool collapsed)
+    {
+        _sidebarCollapsed = collapsed;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task SetDrawerOpenFromShortcutAsync(bool open)
+    {
+        _drawerOpen = open;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleWorkspaceKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape" && _drawerOpen) CloseDrawer();
+    }
 
     // ---------- Notas ----------
 
@@ -219,12 +278,22 @@
         _editorKey = Guid.NewGuid();
     }
 
-    private async Task NewNoteAsync()
+    private async Task SelectRecentAsync(Guid id)
+    {
+        _drawerOpen = false;
+        await SelectAsync(id);
+    }
+
+    private Task NewNoteAsync() => CreateNoteAsync(_query.FolderId);
+
+    private Task NewNoteInFolderAsync(Guid folderId) => CreateNoteAsync(folderId);
+
+    private async Task CreateNoteAsync(Guid? folderId)
     {
         if (_editor is not null) await _editor.FlushAsync();
         _drawerOpen = false;
 
-        var r = await Notes.CreateAsync(new NoteSaveRequest { FolderId = _query.FolderId });
+        var r = await Notes.CreateAsync(new NoteSaveRequest { FolderId = folderId });
         if (!r.Succeeded) { ToastSvc.Error(r.Error!.Message); return; }
 
         if (_query.View is NoteView.Trash or NoteView.Archived) _query = _query with { View = NoteView.All };
@@ -257,6 +326,11 @@
         if (idx >= 0) _notes.RemoveAt(idx);
         var insertAt = saved.IsPinned ? 0 : _notes.Count(n => n.IsPinned);
         if (idx >= 0 || MatchesCurrentView(saved)) _notes.Insert(Math.Min(insertAt, _notes.Count), item);
+
+        _recentNotes.RemoveAll(note => note.Id == saved.Id);
+        _recentNotes.Add(item);
+        _recentNotes = _recentNotes.OrderByDescending(note => note.UpdatedAt).Take(100).ToList();
+        _recentNotesError = null;
 
         if (tagsChanged || idx < 0) await ReloadSidebarAsync();
     }
@@ -321,12 +395,84 @@
 
     // ---------- Pastas ----------
 
-    private async Task CreateFolderAsync(string name)
+    private async Task CreateFolderAsync((string Name, string Color) request)
     {
-        var r = await FolderSvc.CreateAsync(name);
+        var r = await FolderSvc.CreateAsync(request.Name, request.Color);
         if (!r.Succeeded) { ToastSvc.Error(r.Error!.Message); return; }
         ToastSvc.Success($"Pasta “{r.Value!.Name}” criada.");
         await ReloadSidebarAsync();
+    }
+
+    private void StartNoteDrag(Guid id) => _draggedNoteId = id;
+    private void EndNoteDrag() => _draggedNoteId = null;
+
+    private async Task MoveNoteToFolderAsync((Guid NoteId, Guid FolderId) request)
+    {
+        if (_editor is not null && _selected?.Id == request.NoteId)
+        {
+            var previousFolderId = _editor.CurrentFolderId;
+            if (!await _editor.MoveToFolderAsync(request.FolderId))
+            {
+                ToastSvc.Error("A nota não foi movida. Resolva o estado de salvamento no editor e tente novamente.");
+                return;
+            }
+            if (previousFolderId != request.FolderId)
+            {
+                var targetFolderName = _folders.FirstOrDefault(folder => folder.Id == request.FolderId)?.Name ?? "pasta";
+                ToastSvc.Success($"Nota movida para “{targetFolderName}”.");
+            }
+            await RefreshAllAsync();
+            return;
+        }
+
+        var current = await Notes.GetAsync(request.NoteId);
+        if (!current.Succeeded)
+        {
+            ToastSvc.Error(current.Error!.Message);
+            await RefreshAllAsync();
+            return;
+        }
+
+        var note = current.Value!;
+        if (note.IsTrashed || note.IsArchived)
+        {
+            ToastSvc.Error("Notas arquivadas ou na lixeira não podem ser movidas para pastas.");
+            return;
+        }
+        if (note.FolderId == request.FolderId) return;
+
+        var result = await Notes.UpdateAsync(note.Id, new NoteSaveRequest
+        {
+            Title = note.Title,
+            Content = note.Content,
+            FolderId = request.FolderId,
+            Tags = [.. note.Tags],
+            Revision = note.Revision
+        });
+        if (!result.Succeeded)
+        {
+            ToastSvc.Error(result.Error!.Message);
+            await RefreshAllAsync();
+            return;
+        }
+
+        if (_selected?.Id == note.Id)
+        {
+            _selected = result.Value;
+            _editorKey = Guid.NewGuid();
+        }
+
+        var folderName = _folders.FirstOrDefault(folder => folder.Id == request.FolderId)?.Name ?? "pasta";
+        ToastSvc.Success($"Nota movida para “{folderName}”.");
+        await RefreshAllAsync();
+    }
+
+    private async Task RenameFolderAsync((Guid Id, string Name) request)
+    {
+        var result = await FolderSvc.RenameAsync(request.Id, request.Name);
+        if (!result.Succeeded) { ToastSvc.Error(result.Error!.Message); return; }
+        ToastSvc.Success("Pasta renomeada.");
+        await RefreshAllAsync();
     }
 
     private void AskDeleteFolder(Guid id)
@@ -360,5 +506,14 @@
         if (c is not null) await c.Action();
     }
 
-    public void Dispose() { _searchCts?.Cancel(); _searchCts?.Dispose(); }
+    public async ValueTask DisposeAsync()
+    {
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+        if (_sidebarInterop is null) return;
+
+        try { await JS.InvokeVoidAsync("notas.disposeSidebarInteractions"); }
+        catch (JSDisconnectedException) { }
+        _sidebarInterop.Dispose();
+    }
 }

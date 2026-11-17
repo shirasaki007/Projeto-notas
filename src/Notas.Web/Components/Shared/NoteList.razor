@@ -31,6 +31,9 @@
 </div>
 
 <div class="list-body" id="note-list">
+    <p id="note-folder-move-help" class="sr-only">
+        Arraste uma nota para uma pasta na barra lateral para movê-la. Você também pode escolher a pasta no editor.
+    </p>
     @if (Loading)
     {
         <ul class="skeleton-list" aria-busy="true" aria-label="Carregando notas">
@@ -80,9 +83,10 @@
         <ul class="note-items">
             @foreach (var n in Items)
             {
-                <li @key="n.Id">
+                <li @key="n.Id" draggable="@(!n.IsArchived && !n.IsTrashed)"
+                    @ondragstart="() => OnStartDrag.InvokeAsync(n.Id)" @ondragend="OnEndDrag">
                     <button class="note-item @(n.Id == SelectedId ? "selected" : "")" aria-current="@(n.Id == SelectedId ? "true" : null)"
-                            @onclick="() => OnSelect.InvokeAsync(n.Id)">
+                            aria-describedby="note-folder-move-help" @onclick="() => OnSelect.InvokeAsync(n.Id)">
                         <span class="note-item-top">
                             <span class="note-title">@(string.IsNullOrWhiteSpace(n.Title) ? "Sem título" : n.Title)</span>
                             <span class="note-flags">
@@ -127,6 +131,8 @@
     [Parameter] public EventCallback OnLoadMore { get; set; }
     [Parameter] public EventCallback OnRetry { get; set; }
     [Parameter] public EventCallback OnEmptyTrash { get; set; }
+    [Parameter] public EventCallback<Guid> OnStartDrag { get; set; }
+    [Parameter] public EventCallback OnEndDrag { get; set; }
 
     private bool _filters;
 
