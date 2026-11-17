@@ -1,0 +1,117 @@
+@inject IJSRuntime JS
+
+<aside class="pane sidebar" aria-label="Navegação principal">
+    <div class="sidebar-head">
+        <a class="brand" href="/" data-enhance-nav="false"><span class="brand-mark"><Icon Name="notes" Size="16" /></span> Notas</a>
+        <button class="icon-btn" @onclick="ToggleTheme" aria-label="Alternar entre tema claro e escuro" title="Alternar tema">
+            <span class="when-light"><Icon Name="moon" /></span><span class="when-dark"><Icon Name="sun" /></span>
+        </button>
+        <button class="icon-btn drawer-close" @onclick="OnClose" aria-label="Fechar menu"><Icon Name="x" /></button>
+    </div>
+
+    <button class="btn btn-primary btn-block new-note" @onclick="OnNewNote"><Icon Name="plus" Size="16" /> Nova nota</button>
+
+    <nav class="nav" aria-label="Visões">
+        @foreach (var item in Items)
+        {
+            var active = View == item.View && FolderId is null && TagId is null;
+            <button class="nav-item @(active ? "active" : "")" aria-current="@(active ? "page" : null)" @onclick="() => OnView.InvokeAsync(item.View)">
+                <Icon Name="@item.Icon" Size="17" /><span class="grow">@item.Label</span>
+                @if (item.Count > 0) { <span class="count">@item.Count</span> }
+            </button>
+        }
+    </nav>
+
+    <div class="nav-section">
+        <div class="nav-section-head">
+            <h2>Pastas</h2>
+            <button class="icon-btn icon-btn-sm" @onclick="StartAdd" aria-label="Nova pasta" title="Nova pasta"><Icon Name="plus" Size="14" /></button>
+        </div>
+        @if (_adding)
+        {
+            <input class="inline-input" @ref="_folderInput" placeholder="Nome da pasta" maxlength="60" aria-label="Nome da nova pasta"
+                   @bind="_newFolder" @bind:event="oninput" @onkeydown="OnFolderKey" @onblur="CancelAdd" />
+        }
+        @foreach (var f in Folders)
+        {
+            <div class="nav-row @(FolderId == f.Id ? "active" : "")" @key="f.Id">
+                <button class="nav-item" aria-current="@(FolderId == f.Id ? "page" : null)" @onclick="() => OnFolder.InvokeAsync(f.Id)">
+                    <span class="dot" style="background:@f.Color"></span><span class="grow ellipsis">@f.Name</span>
+                    @if (f.NoteCount > 0) { <span class="count">@f.NoteCount</span> }
+                </button>
+                <button class="icon-btn icon-btn-sm row-action" @onclick="() => OnDeleteFolder.InvokeAsync(f.Id)" aria-label="Excluir pasta @f.Name"><Icon Name="trash" Size="13" /></button>
+            </div>
+        }
+        @if (Folders.Count == 0 && !_adding) { <p class="nav-hint">Agrupe suas notas em pastas.</p> }
+    </div>
+
+    <div class="nav-section">
+        <div class="nav-section-head"><h2>Tags</h2></div>
+        <div class="tag-cloud">
+            @foreach (var t in Tags)
+            {
+                <button class="chip chip-btn @(TagId == t.Id ? "active" : "")" @key="t.Id" aria-pressed="@(TagId == t.Id ? "true" : "false")"
+                        @onclick="() => OnTag.InvokeAsync(t.Id)">#@t.Name <span class="chip-count">@t.NoteCount</span></button>
+            }
+            @if (Tags.Count == 0) { <p class="nav-hint">As tags das suas notas aparecem aqui.</p> }
+        </div>
+    </div>
+
+    <div class="sidebar-foot">
+        <AuthorizeView>
+            <Authorized>
+                <div class="user" title="@context.User.Identity?.Name"><Icon Name="user" Size="16" /><span class="ellipsis">@context.User.Identity?.Name</span></div>
+            </Authorized>
+        </AuthorizeView>
+        <a class="foot-link" href="/account/manage" data-enhance-nav="false">Conta</a>
+        <a class="foot-link" href="/account/logout" data-enhance-nav="false"><Icon Name="logout" Size="14" /> Sair</a>
+    </div>
+</aside>
+
+@code {
+    [Parameter] public NoteCounts Counts { get; set; } = new(0, 0, 0, 0, 0);
+    [Parameter] public IReadOnlyList<FolderDto> Folders { get; set; } = [];
+    [Parameter] public IReadOnlyList<TagDto> Tags { get; set; } = [];
+    [Parameter] public NoteView View { get; set; }
+    [Parameter] public Guid? FolderId { get; set; }
+    [Parameter] public Guid? TagId { get; set; }
+    [Parameter] public EventCallback<NoteView> OnView { get; set; }
+    [Parameter] public EventCallback<Guid> OnFolder { get; set; }
+    [Parameter] public EventCallback<Guid> OnTag { get; set; }
+    [Parameter] public EventCallback<string> OnCreateFolder { get; set; }
+    [Parameter] public EventCallback<Guid> OnDeleteFolder { get; set; }
+    [Parameter] public EventCallback OnNewNote { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private bool _adding, _focusInput;
+    private string _newFolder = "";
+    private ElementReference _folderInput;
+
+    private record NavItem(NoteView View, string Icon, string Label, int Count);
+    private NavItem[] Items => [
+        new(NoteView.All, "notes", "Todas as notas", Counts.All),
+        new(NoteView.Pinned, "pin", "Fixadas", Counts.Pinned),
+        new(NoteView.Favorites, "star", "Favoritas", Counts.Favorites),
+        new(NoteView.Archived, "archive", "Arquivo", Counts.Archived),
+        new(NoteView.Trash, "trash", "Lixeira", Counts.Trash)
+    ];
+
+    private void StartAdd() { _adding = true; _focusInput = true; _newFolder = ""; }
+    private void CancelAdd() { _adding = false; }
+
+    private async Task OnFolderKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") { CancelAdd(); return; }
+        if (e.Key != "Enter") return;
+        var name = _newFolder.Trim();
+        _adding = false;
+        if (name.Length > 0) await OnCreateFolder.InvokeAsync(name);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusInput) { _focusInput = false; await _folderInput.FocusAsync(); }
+    }
+
+    private async Task ToggleTheme() => await JS.InvokeVoidAsync("notas.toggleTheme");
+}

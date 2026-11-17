@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="src/Notas.Core/Notas.Core.csproj" />
+  <Project Path="src/Notas.Infrastructure/Notas.Infrastructure.csproj" />
+  <Project Path="src/Notas.Web/Notas.Web.csproj" />
+  <Project Path="tests/Notas.Tests/Notas.Tests.csproj" />
+</Solution>

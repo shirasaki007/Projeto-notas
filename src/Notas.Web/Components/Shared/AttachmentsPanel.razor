@@ -1,0 +1,95 @@
+@inject IAttachmentService Attachments
+@inject ToastService Toasts
+
+<div class="panel">
+    <header class="panel-head">
+        <h2>Anexos</h2>
+        <button class="icon-btn icon-btn-sm" @onclick="OnClose" aria-label="Fechar anexos"><Icon Name="x" Size="16" /></button>
+    </header>
+    <div class="panel-body">
+        <label class="btn btn-secondary btn-block upload @(_uploading ? "is-busy" : "")">
+            <Icon Name="paperclip" Size="16" /> @(_uploading ? "Enviando…" : "Adicionar arquivo")
+            <InputFile class="sr-only" OnChange="UploadAsync" multiple disabled="@(_uploading || ReadOnly)"
+                       accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.txt,.md" />
+        </label>
+        <p class="muted small">Imagens, PDF e texto até 5 MB.</p>
+
+        @if (_items.Count == 0)
+        {
+            <p class="muted small">Nenhum anexo nesta nota.</p>
+        }
+        else
+        {
+            <ul class="attachment-list">
+                @foreach (var a in _items)
+                {
+                    <li @key="a.Id">
+                        @if (a.IsImage) { <img src="@a.Url" alt="" loading="lazy" class="att-thumb" /> }
+                        else { <span class="att-thumb att-icon"><Icon Name="file" /></span> }
+                        <div class="att-info">
+                            <a href="@a.Url" target="_blank" rel="noopener" class="ellipsis" data-enhance-nav="false">@a.FileName</a>
+                            <span class="muted small">@FormatSize(a.Size)</span>
+                        </div>
+                        <button class="btn btn-ghost btn-sm" @onclick="() => InsertAsync(a)" disabled="@ReadOnly">Inserir</button>
+                        <button class="icon-btn icon-btn-sm" @onclick="() => DeleteAsync(a)" aria-label="Excluir anexo @a.FileName" disabled="@ReadOnly"><Icon Name="trash" Size="14" /></button>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid NoteId { get; set; }
+    [Parameter] public List<AttachmentDto> Initial { get; set; } = [];
+    [Parameter] public bool ReadOnly { get; set; }
+    [Parameter] public EventCallback<string> OnInsert { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private List<AttachmentDto> _items = [];
+    private bool _uploading;
+
+    private Task InsertAsync(AttachmentDto attachment)
+    {
+        var markdown = attachment.IsImage
+            ? $"![{attachment.FileName}]({attachment.Url})"
+            : $"[{attachment.FileName}]({attachment.Url})";
+        return OnInsert.InvokeAsync(markdown);
+    }
+
+    protected override void OnInitialized() => _items = [.. Initial];
+
+    private async Task UploadAsync(InputFileChangeEventArgs e)
+    {
+        _uploading = true;
+        try
+        {
+            foreach (var file in e.GetMultipleFiles(5))
+            {
+                try
+                {
+                    await using var stream = file.OpenReadStream(AttachmentLimits.MaxBytes);
+                    var r = await Attachments.UploadAsync(NoteId, file.Name, stream);
+                    if (r.Succeeded) { _items.Add(r.Value!); Toasts.Success($"“{file.Name}” anexado."); }
+                    else Toasts.Error(r.Error!.Message);
+                }
+                catch (IOException) { Toasts.Error($"“{file.Name}” excede o limite de 5 MB."); }
+            }
+        }
+        finally { _uploading = false; }
+    }
+
+    private async Task DeleteAsync(AttachmentDto a)
+    {
+        var r = await Attachments.DeleteAsync(a.Id);
+        if (r.Succeeded) _items.RemoveAll(x => x.Id == a.Id);
+        else Toasts.Error(r.Error!.Message);
+    }
+
+    private static string FormatSize(long b) => b switch
+    {
+        < 1024 => $"{b} B",
+        < 1024 * 1024 => $"{b / 1024.0:0.#} KB",
+        _ => $"{b / 1024.0 / 1024.0:0.#} MB"
+    };
+}

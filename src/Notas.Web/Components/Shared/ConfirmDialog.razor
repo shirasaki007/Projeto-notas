@@ -1,0 +1,34 @@
+@if (Open)
+{
+    <div class="modal-backdrop" @onclick="OnCancel"></div>
+    <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="dlg-title" aria-describedby="dlg-msg"
+         @onkeydown="OnKey">
+        <h2 id="dlg-title">@Title</h2>
+        <p id="dlg-msg">@Message</p>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" @ref="_cancel" @onclick="OnCancel">Cancelar</button>
+            <button class="btn @(Danger ? "btn-danger" : "btn-primary")" @onclick="OnConfirm">@ConfirmText</button>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string Message { get; set; } = "";
+    [Parameter] public string ConfirmText { get; set; } = "Confirmar";
+    [Parameter] public bool Danger { get; set; }
+    [Parameter] public EventCallback OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private ElementReference _cancel;
+    private bool _focused;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Open && !_focused) { _focused = true; await _cancel.FocusAsync(); }
+        if (!Open) _focused = false;
+    }
+
+    private Task OnKey(KeyboardEventArgs e) => e.Key == "Escape" ? OnCancel.InvokeAsync() : Task.CompletedTask;
+}

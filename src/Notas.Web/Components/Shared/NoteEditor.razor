@@ -1,0 +1,321 @@
+@implements IDisposable
+@inject INoteService Notes
+@inject MarkdownService Markdown
+@inject ClientClock Clock
+@inject IJSRuntime JS
+
+<div class="editor">
+    <header class="editor-bar">
+        <button class="icon-btn back-btn" @onclick="OnBack" aria-label="Voltar para a lista"><Icon Name="chevron-left" /></button>
+
+        <div class="save-state save-@_status.ToString().ToLowerInvariant()" role="status" aria-live="polite">
+            @switch (_status)
+            {
+                case SaveStatus.Saved:
+                    <Icon Name="check" Size="14" />
+                    <span>Salvo</span>
+                    break;
+                case SaveStatus.Dirty:
+                    <span class="pulse"></span>
+                    <span>Alterações pendentes…</span>
+                    break;
+                case SaveStatus.Saving:
+                    <span class="spinner"></span>
+                    <span>Salvando…</span>
+                    break;
+                case SaveStatus.Error:
+                    <Icon Name="alert" Size="14" />
+                    <span>@_error</span>
+                    <button class="link-btn" @onclick="SaveAsync">Tentar novamente</button>
+                    break;
+                case SaveStatus.Conflict:
+                    <Icon Name="alert" Size="14" />
+                    <span>Conflito de edição</span>
+                    break;
+            }
+        </div>
+
+        <div class="editor-actions">
+            @if (!Note.IsTrashed)
+            {
+                <div class="seg" role="group" aria-label="Modo do editor">
+                    <button class="seg-btn @(_mode == ViewMode.Write ? "active" : "")" aria-pressed="@(_mode == ViewMode.Write ? "true" : "false")" @onclick="() => SetMode(ViewMode.Write)" title="Escrever"><Icon Name="edit" Size="15" /></button>
+                    <button class="seg-btn seg-split @(_mode == ViewMode.Split ? "active" : "")" aria-pressed="@(_mode == ViewMode.Split ? "true" : "false")" @onclick="() => SetMode(ViewMode.Split)" title="Dividido"><Icon Name="columns" Size="15" /></button>
+                    <button class="seg-btn @(_mode == ViewMode.Read ? "active" : "")" aria-pressed="@(_mode == ViewMode.Read ? "true" : "false")" @onclick="() => SetMode(ViewMode.Read)" title="Visualizar"><Icon Name="eye" Size="15" /></button>
+                </div>
+                <button class="icon-btn @(Note.IsPinned ? "is-on" : "")" aria-pressed="@(Note.IsPinned ? "true" : "false")" title="@(Note.IsPinned ? "Desafixar" : "Fixar")" aria-label="@(Note.IsPinned ? "Desafixar nota" : "Fixar nota")"
+                        @onclick="() => Act(Note.IsPinned ? NoteAction.Unpin : NoteAction.Pin)"><Icon Name="pin" /></button>
+                <button class="icon-btn @(Note.IsFavorite ? "is-on" : "")" aria-pressed="@(Note.IsFavorite ? "true" : "false")" title="@(Note.IsFavorite ? "Remover dos favoritos" : "Favoritar")" aria-label="@(Note.IsFavorite ? "Remover dos favoritos" : "Favoritar nota")"
+                        @onclick="() => Act(Note.IsFavorite ? NoteAction.Unfavorite : NoteAction.Favorite)"><Icon Name="star" /></button>
+                <button class="icon-btn" title="@(Note.IsArchived ? "Desarquivar" : "Arquivar")" aria-label="@(Note.IsArchived ? "Desarquivar nota" : "Arquivar nota")"
+                        @onclick="() => Act(Note.IsArchived ? NoteAction.Unarchive : NoteAction.Archive)"><Icon Name="archive" /></button>
+                <button class="icon-btn @(_panel == Panel.History ? "is-on" : "")" title="Histórico" aria-label="Histórico de versões" @onclick="() => TogglePanel(Panel.History)"><Icon Name="history" /></button>
+                <button class="icon-btn @(_panel == Panel.Attachments ? "is-on" : "")" title="Anexos" aria-label="Anexos" @onclick="() => TogglePanel(Panel.Attachments)"><Icon Name="paperclip" /></button>
+                <button class="icon-btn danger-text" title="Mover para a lixeira" aria-label="Mover para a lixeira" @onclick="() => Act(NoteAction.Trash)"><Icon Name="trash" /></button>
+            }
+            else
+            {
+                <button class="btn btn-secondary btn-sm" @onclick="() => Act(NoteAction.Restore)"><Icon Name="restore" Size="15" /> Restaurar</button>
+                <button class="btn btn-danger btn-sm" @onclick="() => Act(NoteAction.DeleteForever)"><Icon Name="trash" Size="15" /> Excluir de vez</button>
+            }
+        </div>
+    </header>
+
+    @if (Note.IsTrashed)
+    {
+        <div class="banner banner-warn" role="note">Esta nota está na lixeira e não pode ser editada. Restaure-a para voltar a editar.</div>
+    }
+    @if (_status == SaveStatus.Conflict)
+    {
+        <div class="banner banner-danger" role="alert">
+            Esta nota foi alterada em outra aba ou dispositivo. Para não perder nada, copie o que você escreveu e carregue a versão mais recente.
+            <button class="btn btn-secondary btn-sm" @onclick="OnReload">Carregar versão mais recente</button>
+        </div>
+    }
+
+    <div class="editor-main">
+        <div class="editor-col">
+            <div class="editor-head">
+                <input id="note-title" class="title-input" type="text" placeholder="Título da nota" maxlength="200" aria-label="Título da nota"
+                       readonly="@_readOnly" @bind="_title" @bind:event="oninput" @bind:after="MarkDirty" />
+                <div class="meta-row">
+                    <label class="meta-field">
+                        <Icon Name="folder" Size="14" />
+                        <select aria-label="Pasta" disabled="@_readOnly" @bind="_folderId" @bind:after="MarkDirty">
+                            <option value="">Sem pasta</option>
+                            @foreach (var f in Folders) { <option value="@f.Id">@f.Name</option> }
+                        </select>
+                    </label>
+                    <div class="meta-field grow"><Icon Name="tag" Size="14" />
+                        <TagInput Tags="_tags" TagsChanged="OnTagsChanged" Suggestions="TagSuggestions" ReadOnly="_readOnly" />
+                    </div>
+                </div>
+            </div>
+
+            @if (!_readOnly && _mode != ViewMode.Read)
+            {
+                <div class="toolbar" role="toolbar" aria-label="Formatação">
+                    <button class="tb" title="Título" aria-label="Título" @onclick='() => Format("h2")'><Icon Name="heading" Size="16" /></button>
+                    <button class="tb" title="Negrito (Ctrl+B)" aria-label="Negrito" @onclick='() => Format("bold")'><Icon Name="bold" Size="16" /></button>
+                    <button class="tb" title="Itálico (Ctrl+I)" aria-label="Itálico" @onclick='() => Format("italic")'><Icon Name="italic" Size="16" /></button>
+                    <button class="tb" title="Código" aria-label="Código" @onclick='() => Format("code")'><Icon Name="code" Size="16" /></button>
+                    <span class="tb-sep"></span>
+                    <button class="tb" title="Lista" aria-label="Lista com marcadores" @onclick='() => Format("ul")'><Icon Name="list" Size="16" /></button>
+                    <button class="tb" title="Lista numerada" aria-label="Lista numerada" @onclick='() => Format("ol")'><Icon Name="list-ordered" Size="16" /></button>
+                    <button class="tb" title="Tarefas" aria-label="Lista de tarefas" @onclick='() => Format("task")'><Icon Name="check-square" Size="16" /></button>
+                    <button class="tb" title="Citação" aria-label="Citação" @onclick='() => Format("quote")'><Icon Name="quote" Size="16" /></button>
+                    <button class="tb" title="Link" aria-label="Link" @onclick='() => Format("link")'><Icon Name="link" Size="16" /></button>
+                </div>
+            }
+
+            <div class="editor-body mode-@_mode.ToString().ToLowerInvariant()">
+                @if (_mode != ViewMode.Read)
+                {
+                    <textarea id="note-body" class="body-input" data-md-editor placeholder="Comece a escrever… Markdown é suportado."
+                              aria-label="Conteúdo da nota" maxlength="200000" spellcheck="true" readonly="@_readOnly"
+                              @bind="_content" @bind:event="oninput" @bind:after="OnContentChanged"></textarea>
+                }
+                @if (_mode != ViewMode.Write)
+                {
+                    <article class="prose preview" aria-label="Pré-visualização">
+                        @if (string.IsNullOrWhiteSpace(_content)) { <p class="muted">Nada para visualizar ainda.</p> }
+                        else { @((MarkupString)_html) }
+                    </article>
+                }
+            </div>
+
+            <footer class="editor-foot">
+                <span>@_words @(_words == 1 ? "palavra" : "palavras")</span>
+                <span>Atualizada em @Clock.Full(Note.UpdatedAt)</span>
+            </footer>
+        </div>
+
+        @if (_panel == Panel.History)
+        {
+            <aside class="side-panel" aria-label="Histórico">
+                <HistoryPanel NoteId="Note.Id" ReadOnly="_readOnly" OnRestored="OnReplaced" OnClose="() => _panel = Panel.None" />
+            </aside>
+        }
+        else if (_panel == Panel.Attachments)
+        {
+            <aside class="side-panel" aria-label="Anexos">
+                <AttachmentsPanel NoteId="Note.Id" Initial="Note.Attachments.ToList()" ReadOnly="_readOnly" OnInsert="InsertTextAsync" OnClose="() => _panel = Panel.None" />
+            </aside>
+        }
+    </div>
+</div>
+
+@code {
+    private enum SaveStatus { Saved, Dirty, Saving, Error, Conflict }
+    private enum ViewMode { Write, Split, Read }
+    private enum Panel { None, History, Attachments }
+
+    [Parameter, EditorRequired] public NoteDetailDto Note { get; set; } = default!;
+    [Parameter] public IReadOnlyList<FolderDto> Folders { get; set; } = [];
+    [Parameter] public IReadOnlyList<TagDto> TagSuggestions { get; set; } = [];
+    [Parameter] public EventCallback<NoteDetailDto> OnSaved { get; set; }
+    [Parameter] public EventCallback<NoteDetailDto> OnReplaced { get; set; }
+    [Parameter] public EventCallback<NoteAction> OnAction { get; set; }
+    [Parameter] public EventCallback OnBack { get; set; }
+    [Parameter] public EventCallback OnReload { get; set; }
+
+    private readonly SemaphoreSlim _gate = new(1, 1);
+    private CancellationTokenSource? _debounce;
+    private string _title = "", _content = "", _html = "", _error = "Falha ao salvar";
+    private Guid? _folderId;
+    private List<string> _tags = [];
+    private int _revision, _edits, _words;
+    private bool _readOnly;
+    private SaveStatus _status = SaveStatus.Saved;
+    private ViewMode _mode = ViewMode.Write;
+    private Panel _panel = Panel.None;
+    private bool _disposed;
+
+    // O pai recria este componente (via @key) ao trocar de nota ou restaurar versão;
+    // por isso os campos são carregados uma única vez e nunca sobrescritos por re-render.
+    protected override void OnInitialized()
+    {
+        _title = Note.Title;
+        _content = Note.Content;
+        _folderId = Note.FolderId;
+        _tags = [.. Note.Tags];
+        _revision = Note.Revision;
+        _readOnly = Note.IsTrashed;
+        _words = CountWords(_content);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_readOnly && _title.Length == 0 && _content.Length == 0)
+            await SafeJs("notas.focus", "note-title");
+    }
+
+    // ---------- Edição / autosave ----------
+
+    private void OnContentChanged()
+    {
+        _words = CountWords(_content);
+        if (_mode != ViewMode.Write) _html = Markdown.ToHtml(_content);
+        MarkDirty();
+    }
+
+    private Task OnTagsChanged(List<string> tags) { _tags = tags; MarkDirty(); return Task.CompletedTask; }
+
+    private void MarkDirty()
+    {
+        if (_readOnly || _status == SaveStatus.Conflict) return;
+        _edits++;
+        _status = SaveStatus.Dirty;
+        _ = SafeJs("notas.setDirty", true);
+
+        _debounce?.Cancel();
+        _debounce?.Dispose();
+        _debounce = new CancellationTokenSource();
+        _ = DebounceAsync(_debounce.Token);
+    }
+
+    private async Task DebounceAsync(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(900, token);
+            await InvokeAsync(SaveAsync);
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    /// <summary>Chamado pelo pai antes de trocar de nota / executar ações, para não perder edições.</summary>
+    public async Task FlushAsync()
+    {
+        _debounce?.Cancel();
+        if (_status is SaveStatus.Dirty or SaveStatus.Error) await SaveAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            if (_disposed || _readOnly || _status == SaveStatus.Conflict) return;
+
+            var seen = _edits;
+            _status = SaveStatus.Saving;
+            StateHasChanged();
+
+            var request = new NoteSaveRequest { Title = _title, Content = _content, FolderId = _folderId, Tags = [.. _tags], Revision = _revision };
+            var result = await Notes.UpdateAsync(Note.Id, request);
+
+            if (result.Succeeded)
+            {
+                _revision = result.Value!.Revision;
+                _status = _edits == seen ? SaveStatus.Saved : SaveStatus.Dirty; // houve digitação durante o salvamento
+                if (_status == SaveStatus.Saved) _ = SafeJs("notas.setDirty", false);
+                await OnSaved.InvokeAsync(result.Value);
+            }
+            else if (result.Error!.Kind == ErrorKind.Conflict)
+            {
+                _status = SaveStatus.Conflict;
+            }
+            else
+            {
+                _status = SaveStatus.Error;
+                _error = result.Error.Message;
+            }
+        }
+        catch (Exception)
+        {
+            _status = SaveStatus.Error;
+            _error = "Sem conexão. Suas alterações ainda não foram salvas.";
+        }
+        finally
+        {
+            _gate.Release();
+            if (!_disposed) StateHasChanged();
+        }
+    }
+
+    // ---------- UI ----------
+
+    private void SetMode(ViewMode m)
+    {
+        _mode = m;
+        if (m != ViewMode.Write) _html = Markdown.ToHtml(_content);
+    }
+
+    private void TogglePanel(Panel p) => _panel = _panel == p ? Panel.None : p;
+
+    private async Task Act(NoteAction action)
+    {
+        await FlushAsync();
+        await OnAction.InvokeAsync(action);
+    }
+
+    private async Task Format(string kind) => await SafeJs("notas.format", "note-body", kind);
+
+    private async Task InsertTextAsync(string text) => await SafeJs("notas.insert", "note-body", text);
+
+    private static int CountWords(string s)
+    {
+        var count = 0; var inWord = false;
+        foreach (var c in s)
+        {
+            if (char.IsWhiteSpace(c)) inWord = false;
+            else if (!inWord) { inWord = true; count++; }
+        }
+        return count;
+    }
+
+    private async Task SafeJs(string fn, params object?[] args)
+    {
+        try { await JS.InvokeVoidAsync(fn, args); }
+        catch (Exception ex) when (ex is JSDisconnectedException or TaskCanceledException or ObjectDisposedException or InvalidOperationException) { }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _debounce?.Cancel();
+        _debounce?.Dispose();
+        _ = SafeJs("notas.setDirty", false);
+    }
+}

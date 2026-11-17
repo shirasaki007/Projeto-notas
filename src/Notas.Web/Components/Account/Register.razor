@@ -1,0 +1,71 @@
+@page "/account/register"
+@inject UserManager<AppUser> UserManager
+@inject SignInManager<AppUser> SignInManager
+@inject NavigationManager Nav
+
+<PageTitle>Criar conta · Notas</PageTitle>
+
+<h1>Criar conta</h1>
+<p class="lead">Leva menos de um minuto. Suas notas ficam só para você.</p>
+
+@if (_errors.Count > 0)
+{
+    <div class="alert alert-danger" role="alert"><ul>@foreach (var e in _errors) { <li>@e</li> }</ul></div>
+}
+
+<EditForm Model="Input" FormName="register" method="post" OnValidSubmit="RegisterAsync" class="form" novalidate>
+    <DataAnnotationsValidator />
+    <div class="field">
+        <label for="name">Nome</label>
+        <InputText id="name" @bind-Value="Input.DisplayName" autocomplete="name" />
+        <ValidationMessage For="() => Input.DisplayName" class="field-error" />
+    </div>
+    <div class="field">
+        <label for="email">E-mail</label>
+        <InputText id="email" @bind-Value="Input.Email" type="email" autocomplete="username" inputmode="email" />
+        <ValidationMessage For="() => Input.Email" class="field-error" />
+    </div>
+    <div class="field">
+        <label for="password">Senha</label>
+        <InputText id="password" @bind-Value="Input.Password" type="password" autocomplete="new-password" aria-describedby="pw-help" />
+        <small id="pw-help" class="hint">Mínimo de 10 caracteres, com maiúscula, minúscula e número.</small>
+        <ValidationMessage For="() => Input.Password" class="field-error" />
+    </div>
+    <div class="field">
+        <label for="confirm">Confirmar senha</label>
+        <InputText id="confirm" @bind-Value="Input.ConfirmPassword" type="password" autocomplete="new-password" />
+        <ValidationMessage For="() => Input.ConfirmPassword" class="field-error" />
+    </div>
+    <button type="submit" class="btn btn-primary btn-block">Criar conta</button>
+</EditForm>
+
+<p class="auth-links">Já tem conta? <a href="account/login">Entrar</a></p>
+
+@code {
+    private List<string> _errors = [];
+
+    [SupplyParameterFromForm] private RegisterInput Input { get; set; } = new();
+
+    private async Task RegisterAsync()
+    {
+        var email = Input.Email.Trim();
+        var user = new AppUser { UserName = email, Email = email, DisplayName = Input.DisplayName.Trim() };
+        var result = await UserManager.CreateAsync(user, Input.Password);
+        if (!result.Succeeded) { _errors = result.Errors.Select(e => e.Description).ToList(); return; }
+
+        await SignInManager.SignInAsync(user, isPersistent: false);
+        Nav.NavigateTo("/");
+    }
+
+    private sealed class RegisterInput
+    {
+        [Required(ErrorMessage = "Informe seu nome."), StringLength(60, ErrorMessage = "Máximo de 60 caracteres.")]
+        public string DisplayName { get; set; } = "";
+        [Required(ErrorMessage = "Informe seu e-mail."), EmailAddress(ErrorMessage = "E-mail inválido.")]
+        public string Email { get; set; } = "";
+        [Required(ErrorMessage = "Crie uma senha."), StringLength(100, MinimumLength = 10, ErrorMessage = "A senha deve ter de 10 a 100 caracteres.")]
+        public string Password { get; set; } = "";
+        [Required(ErrorMessage = "Confirme a senha."), Compare(nameof(Password), ErrorMessage = "As senhas não conferem.")]
+        public string ConfirmPassword { get; set; } = "";
+    }
+}

@@ -1,0 +1,364 @@
+@page "/"
+@layout BlankLayout
+@attribute [Authorize]
+@rendermode RenderModes.Interactive
+@implements IDisposable
+@inject INoteService Notes
+@inject IFolderService FolderSvc
+@inject ITagService TagSvc
+@inject ToastService ToastSvc
+@inject ClientClock Clock
+@inject IJSRuntime JS
+@inject ILogger<Workspace> Logger
+
+<PageTitle>Notas</PageTitle>
+<a class="skip-link" href="#note-list">Ir para a lista de notas</a>
+
+<div class="app @(_drawerOpen ? "drawer-open" : "") @(_selected is not null ? "has-note" : "")">
+    <Sidebar Counts="_counts" Folders="_folders" Tags="_tags"
+             View="_query.View" FolderId="_query.FolderId" TagId="_query.TagId"
+             OnView="SetViewAsync" OnFolder="SetFolderAsync" OnTag="SetTagAsync"
+             OnCreateFolder="CreateFolderAsync" OnDeleteFolder="AskDeleteFolder"
+             OnNewNote="NewNoteAsync" OnClose="CloseDrawer" />
+    <div class="scrim" @onclick="CloseDrawer"></div>
+
+    <section class="pane pane-list" aria-label="Lista de notas">
+        <NoteList Title="@ListTitle" Query="_query" Items="_notes" Total="_total"
+                  Loading="_loading" LoadingMore="_loadingMore" HasMore="HasMore" Error="@_error"
+                  SelectedId="_selected?.Id"
+                  OnSearch="OnSearchAsync" OnDates="OnDatesAsync" OnSelect="SelectAsync" OnNew="NewNoteAsync"
+                  OnMenu="() => _drawerOpen = true" OnLoadMore="LoadMoreAsync" OnRetry="RetryAsync"
+                  OnEmptyTrash="AskEmptyTrash" />
+    </section>
+
+    <section class="pane pane-editor" aria-label="Editor">
+        @if (_selected is not null)
+        {
+            <NoteEditor @key="_editorKey" @ref="_editor" Note="_selected" Folders="_folders" TagSuggestions="_tags"
+                        OnSaved="OnEditorSavedAsync" OnReplaced="OnReplacedAsync" OnAction="HandleActionAsync"
+                        OnBack="CloseEditorAsync" OnReload="ReloadSelectedAsync" />
+        }
+        else
+        {
+            <EmptyState Icon="notes" Title="Selecione ou crie uma nota"
+                        Description="Suas anotações são salvas automaticamente enquanto você escreve.">
+                <button class="btn btn-primary" @onclick="NewNoteAsync"><Icon Name="plus" Size="16" /> Nova nota</button>
+            </EmptyState>
+        }
+    </section>
+</div>
+
+<ConfirmDialog Open="_confirm is not null" Title="@_confirm?.Title" Message="@_confirm?.Message"
+               ConfirmText="@(_confirm?.ConfirmText ?? "Confirmar")" Danger="true"
+               OnConfirm="RunConfirmAsync" OnCancel="() => _confirm = null" />
+<Toasts />
+
+@code {
+    private sealed record ConfirmState(string Title, string Message, string ConfirmText, Func<Task> Action);
+
+    private NoteQuery _query = new();
+    private List<NoteListItemDto> _notes = [];
+    private int _total;
+    private bool _loading = true, _loadingMore, _drawerOpen;
+    private string? _error;
+    private NoteDetailDto? _selected;
+    private Guid _editorKey = Guid.NewGuid();
+    private NoteEditor? _editor;
+    private NoteCounts _counts = new(0, 0, 0, 0, 0);
+    private IReadOnlyList<FolderDto> _folders = [];
+    private IReadOnlyList<TagDto> _tags = [];
+    private CancellationTokenSource? _searchCts;
+    private ConfirmState? _confirm;
+
+    private bool HasMore => _notes.Count < _total;
+
+    private string ListTitle =>
+        _query.FolderId is Guid f ? _folders.FirstOrDefault(x => x.Id == f)?.Name ?? "Pasta" :
+        _query.TagId is Guid t ? "#" + (_tags.FirstOrDefault(x => x.Id == t)?.Name ?? "tag") :
+        _query.View switch
+        {
+            NoteView.Pinned => "Fixadas",
+            NoteView.Favorites => "Favoritas",
+            NoteView.Archived => "Arquivo",
+            NoteView.Trash => "Lixeira",
+            _ => "Todas as notas"
+        };
+
+    // ---------- Ciclo de vida ----------
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(ReloadListAsync(showSkeleton: true), ReloadSidebarAsync());
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            Clock.OffsetMinutes = await JS.InvokeAsync<int>("notas.tzOffset");
+            StateHasChanged();
+        }
+        catch (JSDisconnectedException) { }
+    }
+
+    // ---------- Carregamento ----------
+
+    private async Task ReloadListAsync(bool showSkeleton)
+    {
+        if (showSkeleton) _loading = true;
+        _error = null;
+        try
+        {
+            var page = await Notes.ListAsync(_query with { Page = 1 });
+            _notes = [.. page.Items];
+            _total = page.Total;
+            _query = _query with { Page = 1 };
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Falha ao listar notas");
+            _error = "Não foi possível carregar suas notas. Verifique a conexão e tente de novo.";
+        }
+        finally { _loading = false; }
+    }
+
+    private async Task ReloadSidebarAsync()
+    {
+        try
+        {
+            var counts = Notes.GetCountsAsync();
+            var folders = FolderSvc.ListAsync();
+            var tags = TagSvc.ListAsync();
+            await Task.WhenAll(counts, folders, tags);
+            _counts = counts.Result; _folders = folders.Result; _tags = tags.Result;
+        }
+        catch (Exception ex) { Logger.LogError(ex, "Falha ao carregar a barra lateral"); }
+    }
+
+    private async Task RefreshAllAsync()
+    {
+        await Task.WhenAll(ReloadListAsync(showSkeleton: false), ReloadSidebarAsync());
+    }
+
+    private Task RetryAsync() => ReloadListAsync(showSkeleton: true);
+
+    private async Task LoadMoreAsync()
+    {
+        _loadingMore = true;
+        try
+        {
+            var next = _query with { Page = _query.Page + 1 };
+            var page = await Notes.ListAsync(next);
+            _notes.AddRange(page.Items.Where(n => _notes.All(x => x.Id != n.Id)));
+            _total = page.Total;
+            _query = next;
+        }
+        catch (Exception ex) { Logger.LogError(ex, "Falha ao carregar mais"); ToastSvc.Error("Não foi possível carregar mais notas."); }
+        finally { _loadingMore = false; }
+    }
+
+    // ---------- Navegação / filtros ----------
+
+    private async Task ResetSelectionAsync()
+    {
+        _drawerOpen = false;
+        await CloseEditorAsync();
+    }
+
+    private async Task SetViewAsync(NoteView view)
+    {
+        await ResetSelectionAsync();
+        _query = _query with { View = view, FolderId = null, TagId = null, Page = 1 };
+        await ReloadListAsync(showSkeleton: true);
+    }
+
+    private async Task SetFolderAsync(Guid id)
+    {
+        await ResetSelectionAsync();
+        _query = _query with { View = NoteView.All, FolderId = id, TagId = null, Page = 1 };
+        await ReloadListAsync(showSkeleton: true);
+    }
+
+    private async Task SetTagAsync(Guid id)
+    {
+        await ResetSelectionAsync();
+        _query = _query with { View = NoteView.All, FolderId = null, TagId = _query.TagId == id ? null : id, Page = 1 };
+        await ReloadListAsync(showSkeleton: true);
+    }
+
+    private async Task OnSearchAsync(string value)
+    {
+        _searchCts?.Cancel();
+        _searchCts = new CancellationTokenSource();
+        var token = _searchCts.Token;
+        try { await Task.Delay(300, token); } catch (OperationCanceledException) { return; }
+
+        _query = _query with { Search = string.IsNullOrWhiteSpace(value) ? null : value.Trim(), Page = 1 };
+        await ReloadListAsync(showSkeleton: false);
+    }
+
+    private async Task OnDatesAsync((DateOnly? From, DateOnly? To) range)
+    {
+        _query = _query with { From = range.From, To = range.To, Page = 1 };
+        await ReloadListAsync(showSkeleton: false);
+    }
+
+    private void CloseDrawer() => _drawerOpen = false;
+
+    // ---------- Notas ----------
+
+    private async Task SelectAsync(Guid id)
+    {
+        if (_selected?.Id == id) return;
+        if (_editor is not null) await _editor.FlushAsync();
+
+        var r = await Notes.GetAsync(id);
+        if (!r.Succeeded) { ToastSvc.Error(r.Error!.Message); await RefreshAllAsync(); return; }
+        _selected = r.Value;
+        _editorKey = Guid.NewGuid();
+    }
+
+    private async Task NewNoteAsync()
+    {
+        if (_editor is not null) await _editor.FlushAsync();
+        _drawerOpen = false;
+
+        var r = await Notes.CreateAsync(new NoteSaveRequest { FolderId = _query.FolderId });
+        if (!r.Succeeded) { ToastSvc.Error(r.Error!.Message); return; }
+
+        if (_query.View is NoteView.Trash or NoteView.Archived) _query = _query with { View = NoteView.All };
+        _selected = r.Value;
+        _editorKey = Guid.NewGuid();
+        await RefreshAllAsync();
+    }
+
+    private async Task CloseEditorAsync()
+    {
+        if (_editor is not null) await _editor.FlushAsync();
+        _selected = null;
+        _editor = null;
+    }
+
+    private async Task ReloadSelectedAsync()
+    {
+        if (_selected is null) return;
+        var r = await Notes.GetAsync(_selected.Id);
+        if (r.Succeeded) { _selected = r.Value; _editorKey = Guid.NewGuid(); await RefreshAllAsync(); }
+    }
+
+    private async Task OnEditorSavedAsync(NoteDetailDto saved)
+    {
+        var tagsChanged = _selected is null || !_selected.Tags.SequenceEqual(saved.Tags);
+        _selected = saved; // mesma chave -> o editor não é recriado
+
+        var item = saved.ToListItem();
+        var idx = _notes.FindIndex(n => n.Id == saved.Id);
+        if (idx >= 0) _notes.RemoveAt(idx);
+        var insertAt = saved.IsPinned ? 0 : _notes.Count(n => n.IsPinned);
+        if (idx >= 0 || MatchesCurrentView(saved)) _notes.Insert(Math.Min(insertAt, _notes.Count), item);
+
+        if (tagsChanged || idx < 0) await ReloadSidebarAsync();
+    }
+
+    private bool MatchesCurrentView(NoteDetailDto n) =>
+        !n.IsTrashed && !n.IsArchived && _query.View == NoteView.All && _query.Search is null;
+
+    private async Task OnReplacedAsync(NoteDetailDto restored)
+    {
+        _selected = restored;
+        _editorKey = Guid.NewGuid(); // restauração de versão: recria o editor com o novo conteúdo
+        await RefreshAllAsync();
+    }
+
+    private async Task HandleActionAsync(NoteAction action)
+    {
+        if (_selected is null) return;
+        var id = _selected.Id;
+
+        if (action == NoteAction.DeleteForever)
+        {
+            _confirm = new("Excluir definitivamente?", "Esta nota e seus anexos serão apagados para sempre. Não é possível desfazer.", "Excluir de vez", async () =>
+            {
+                var r = await Notes.DeletePermanentlyAsync(id);
+                if (!r.Succeeded) { ToastSvc.Error(r.Error!.Message); return; }
+                _selected = null; _editor = null;
+                ToastSvc.Success("Nota excluída definitivamente.");
+                await RefreshAllAsync();
+            });
+            return;
+        }
+
+        var result = await Notes.ApplyAsync(id, action);
+        if (!result.Succeeded) { ToastSvc.Error(result.Error!.Message); await RefreshAllAsync(); return; }
+
+        switch (action)
+        {
+            case NoteAction.Trash:
+                _selected = null; _editor = null;
+                ToastSvc.Success("Nota movida para a lixeira.", "Desfazer", async () => { await Notes.ApplyAsync(id, NoteAction.Restore); await RefreshAllAsync(); });
+                break;
+            case NoteAction.Archive:
+                _selected = null; _editor = null;
+                ToastSvc.Success("Nota arquivada.", "Desfazer", async () => { await Notes.ApplyAsync(id, NoteAction.Unarchive); await RefreshAllAsync(); });
+                break;
+            case NoteAction.Unarchive: ToastSvc.Success("Nota desarquivada."); await RefreshSelectedFlagsAsync(id); break;
+            case NoteAction.Restore: ToastSvc.Success("Nota restaurada."); _selected = null; _editor = null; break;
+            case NoteAction.Pin: ToastSvc.Success("Nota fixada."); await RefreshSelectedFlagsAsync(id); break;
+            case NoteAction.Unpin: await RefreshSelectedFlagsAsync(id); break;
+            case NoteAction.Favorite: ToastSvc.Success("Adicionada aos favoritos."); await RefreshSelectedFlagsAsync(id); break;
+            case NoteAction.Unfavorite: await RefreshSelectedFlagsAsync(id); break;
+        }
+        await RefreshAllAsync();
+    }
+
+    /// <summary>Atualiza flags do detalhe sem recriar o editor (preserva cursor e texto em edição).</summary>
+    private async Task RefreshSelectedFlagsAsync(Guid id)
+    {
+        var r = await Notes.GetAsync(id);
+        if (r.Succeeded && _selected?.Id == id) _selected = r.Value;
+    }
+
+    // ---------- Pastas ----------
+
+    private async Task CreateFolderAsync(string name)
+    {
+        var r = await FolderSvc.CreateAsync(name);
+        if (!r.Succeeded) { ToastSvc.Error(r.Error!.Message); return; }
+        ToastSvc.Success($"Pasta “{r.Value!.Name}” criada.");
+        await ReloadSidebarAsync();
+    }
+
+    private void AskDeleteFolder(Guid id)
+    {
+        var name = _folders.FirstOrDefault(f => f.Id == id)?.Name ?? "pasta";
+        _confirm = new($"Excluir a pasta “{name}”?", "As notas dentro dela não serão apagadas; apenas ficarão sem pasta.", "Excluir pasta", async () =>
+        {
+            var r = await FolderSvc.DeleteAsync(id);
+            if (!r.Succeeded) { ToastSvc.Error(r.Error!.Message); return; }
+            if (_query.FolderId == id) _query = _query with { FolderId = null, Page = 1 };
+            ToastSvc.Success("Pasta excluída.");
+            await RefreshAllAsync();
+        });
+    }
+
+    private void AskEmptyTrash()
+    {
+        _confirm = new("Esvaziar a lixeira?", $"{_total} nota(s) serão apagadas para sempre, junto com seus anexos.", "Esvaziar", async () =>
+        {
+            var n = await Notes.EmptyTrashAsync();
+            _selected = null; _editor = null;
+            ToastSvc.Success($"{n} nota(s) excluída(s) definitivamente.");
+            await RefreshAllAsync();
+        });
+    }
+
+    private async Task RunConfirmAsync()
+    {
+        var c = _confirm;
+        _confirm = null;
+        if (c is not null) await c.Action();
+    }
+
+    public void Dispose() { _searchCts?.Cancel(); _searchCts?.Dispose(); }
+}

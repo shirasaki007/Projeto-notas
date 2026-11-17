@@ -1,0 +1,25 @@
+@page "/account/logout"
+@attribute [Authorize]
+@inject SignInManager<AppUser> SignInManager
+@inject NavigationManager Nav
+
+<PageTitle>Sair · Notas</PageTitle>
+
+<h1>Sair da conta?</h1>
+<p class="lead">Você precisará entrar novamente para acessar suas notas.</p>
+
+<EditForm Model="_form" FormName="logout" method="post" OnSubmit="LogoutAsync" class="form">
+    <button type="submit" class="btn btn-primary btn-block">Sair</button>
+    <a class="btn btn-ghost btn-block" href="/" data-enhance-nav="false">Cancelar</a>
+</EditForm>
+
+@code {
+    private readonly object _form = new();
+
+    // POST + antiforgery: impede "logout forçado" por links maliciosos.
+    private async Task LogoutAsync()
+    {
+        await SignInManager.SignOutAsync();
+        Nav.NavigateTo("account/login");
+    }
+}

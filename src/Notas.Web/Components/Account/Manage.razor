@@ -1,0 +1,139 @@
+@page "/account/manage"
+@attribute [Authorize]
+@inject UserManager<AppUser> UserManager
+@inject SignInManager<AppUser> SignInManager
+@inject IFileStorage Storage
+@inject NavigationManager Nav
+
+<PageTitle>Minha conta · Notas</PageTitle>
+
+<h1>Minha conta</h1>
+<p class="lead">@_user?.Email</p>
+
+<section class="card-section">
+    <h2>Perfil</h2>
+    @if (_profileMsg is not null) { <div class="alert alert-success" role="status">@_profileMsg</div> }
+    <EditForm Model="Profile" FormName="profile" method="post" OnValidSubmit="SaveProfileAsync" class="form" novalidate>
+        <DataAnnotationsValidator />
+        <div class="field">
+            <label for="dn">Nome de exibição</label>
+            <InputText id="dn" @bind-Value="Profile.DisplayName" autocomplete="name" />
+            <ValidationMessage For="() => Profile.DisplayName" class="field-error" />
+        </div>
+        <button type="submit" class="btn btn-secondary">Salvar perfil</button>
+    </EditForm>
+</section>
+
+<section class="card-section">
+    <h2>Alterar senha</h2>
+    @if (_pwMsg is not null) { <div class="alert alert-success" role="status">@_pwMsg</div> }
+    @if (_pwErrors.Count > 0) { <div class="alert alert-danger" role="alert"><ul>@foreach (var e in _pwErrors) { <li>@e</li> }</ul></div> }
+    <EditForm Model="Pw" FormName="password" method="post" OnValidSubmit="ChangePasswordAsync" class="form" novalidate>
+        <DataAnnotationsValidator />
+        <div class="field">
+            <label for="cur">Senha atual</label>
+            <InputText id="cur" @bind-Value="Pw.Current" type="password" autocomplete="current-password" />
+            <ValidationMessage For="() => Pw.Current" class="field-error" />
+        </div>
+        <div class="field">
+            <label for="new">Nova senha</label>
+            <InputText id="new" @bind-Value="Pw.New" type="password" autocomplete="new-password" />
+            <ValidationMessage For="() => Pw.New" class="field-error" />
+        </div>
+        <div class="field">
+            <label for="conf">Confirmar nova senha</label>
+            <InputText id="conf" @bind-Value="Pw.Confirm" type="password" autocomplete="new-password" />
+            <ValidationMessage For="() => Pw.Confirm" class="field-error" />
+        </div>
+        <button type="submit" class="btn btn-secondary">Atualizar senha</button>
+    </EditForm>
+</section>
+
+<section class="card-section">
+    <h2>Seus dados</h2>
+    <p class="muted">Baixe uma cópia de todas as suas notas em JSON.</p>
+    <a class="btn btn-secondary" href="/api/v1/export" download data-enhance-nav="false">Exportar minhas notas</a>
+</section>
+
+<section class="card-section danger-zone">
+    <h2>Excluir conta</h2>
+    <p class="muted">Remove sua conta, todas as notas, anexos e histórico. Não é possível desfazer.</p>
+    @if (_delError is not null) { <div class="alert alert-danger" role="alert">@_delError</div> }
+    <EditForm Model="Del" FormName="delete-account" method="post" OnValidSubmit="DeleteAsync" class="form" novalidate>
+        <DataAnnotationsValidator />
+        <div class="field">
+            <label for="delpw">Confirme com sua senha</label>
+            <InputText id="delpw" @bind-Value="Del.Password" type="password" autocomplete="current-password" />
+            <ValidationMessage For="() => Del.Password" class="field-error" />
+        </div>
+        <button type="submit" class="btn btn-danger">Excluir conta definitivamente</button>
+    </EditForm>
+</section>
+
+@code {
+    private AppUser? _user;
+    private string? _profileMsg, _pwMsg, _delError;
+    private List<string> _pwErrors = [];
+
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+    [SupplyParameterFromForm(FormName = "profile")] private ProfileInput Profile { get; set; } = new();
+    [SupplyParameterFromForm(FormName = "password")] private PwInput Pw { get; set; } = new();
+    [SupplyParameterFromForm(FormName = "delete-account")] private DelInput Del { get; set; } = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = await UserManager.GetUserAsync(HttpContext.User);
+        if (_user is null) { Nav.NavigateTo("account/login", forceLoad: true); return; }
+        Profile.DisplayName ??= _user.DisplayName ?? "";
+    }
+
+    private async Task SaveProfileAsync()
+    {
+        if (_user is null) return;
+        _user.DisplayName = Profile.DisplayName.Trim();
+        var r = await UserManager.UpdateAsync(_user);
+        _profileMsg = r.Succeeded ? "Perfil atualizado." : null;
+    }
+
+    private async Task ChangePasswordAsync()
+    {
+        if (_user is null) return;
+        var r = await UserManager.ChangePasswordAsync(_user, Pw.Current, Pw.New);
+        if (!r.Succeeded) { _pwErrors = r.Errors.Select(e => e.Description).ToList(); return; }
+        await SignInManager.RefreshSignInAsync(_user); // mantém esta sessão; invalida as demais (security stamp)
+        _pwErrors = [];
+        _pwMsg = "Senha alterada com sucesso.";
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_user is null) return;
+        if (!await UserManager.CheckPasswordAsync(_user, Del.Password)) { _delError = "Senha incorreta."; return; }
+
+        await Storage.DeleteUserDataAsync(_user.Id);
+        var r = await UserManager.DeleteAsync(_user); // cascata no banco remove notas, tags, pastas, anexos e versões
+        if (!r.Succeeded) { _delError = "Não foi possível excluir a conta agora. Tente novamente."; return; }
+        await SignInManager.SignOutAsync();
+        Nav.NavigateTo("account/login?msg=deleted");
+    }
+
+    private sealed class ProfileInput
+    {
+        [Required(ErrorMessage = "Informe seu nome."), StringLength(60, ErrorMessage = "Máximo de 60 caracteres.")]
+        public string DisplayName { get; set; } = "";
+    }
+
+    private sealed class PwInput
+    {
+        [Required(ErrorMessage = "Informe a senha atual.")] public string Current { get; set; } = "";
+        [Required(ErrorMessage = "Crie uma nova senha."), StringLength(100, MinimumLength = 10, ErrorMessage = "A senha deve ter de 10 a 100 caracteres.")]
+        public string New { get; set; } = "";
+        [Required(ErrorMessage = "Confirme a nova senha."), Compare(nameof(New), ErrorMessage = "As senhas não conferem.")]
+        public string Confirm { get; set; } = "";
+    }
+
+    private sealed class DelInput
+    {
+        [Required(ErrorMessage = "Informe sua senha.")] public string Password { get; set; } = "";
+    }
+}

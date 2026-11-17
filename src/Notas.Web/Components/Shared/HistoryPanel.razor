@@ -1,0 +1,64 @@
+@inject INoteService Notes
+@inject ClientClock Clock
+@inject ToastService Toasts
+
+<div class="panel">
+    <header class="panel-head">
+        <h2>Histórico de versões</h2>
+        <button class="icon-btn icon-btn-sm" @onclick="OnClose" aria-label="Fechar histórico"><Icon Name="x" Size="16" /></button>
+    </header>
+    <div class="panel-body">
+        @if (_loading)
+        {
+            <div class="sk sk-line"></div><div class="sk sk-line"></div><div class="sk sk-line short"></div>
+        }
+        else if (_versions.Count == 0)
+        {
+            <p class="muted small">Ainda não há versões anteriores. Elas são criadas automaticamente enquanto você edita (até 30).</p>
+        }
+        else
+        {
+            <ul class="version-list">
+                @foreach (var v in _versions)
+                {
+                    <li @key="v.Id">
+                        <div class="version-top">
+                            <strong>@Clock.Full(v.CreatedAt)</strong>
+                            <button class="btn btn-secondary btn-sm" disabled="@_busy" @onclick="() => RestoreAsync(v)">Restaurar</button>
+                        </div>
+                        <div class="version-title">@(string.IsNullOrWhiteSpace(v.Title) ? "Sem título" : v.Title)</div>
+                        <div class="version-snippet">@Snippets.From(v.Content, 120)</div>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid NoteId { get; set; }
+    [Parameter] public bool ReadOnly { get; set; }
+    [Parameter] public EventCallback<NoteDetailDto> OnRestored { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private IReadOnlyList<NoteVersionDto> _versions = [];
+    private bool _loading = true, _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _versions = await Notes.GetVersionsAsync(NoteId); }
+        catch { Toasts.Error("Não foi possível carregar o histórico."); }
+        _loading = false;
+    }
+
+    private async Task RestoreAsync(NoteVersionDto v)
+    {
+        _busy = true;
+        var r = await Notes.RestoreVersionAsync(NoteId, v.Id);
+        _busy = false;
+        if (!r.Succeeded) { Toasts.Error(r.Error!.Message); return; }
+        Toasts.Success("Versão restaurada. A versão anterior foi guardada no histórico.");
+        _versions = await Notes.GetVersionsAsync(NoteId);
+        await OnRestored.InvokeAsync(r.Value!);
+    }
+}

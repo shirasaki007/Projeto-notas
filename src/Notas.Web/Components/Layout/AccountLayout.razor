@@ -1,0 +1,18 @@
+@inherits LayoutComponentBase
+
+<div class="auth-shell">
+    <header class="auth-top">
+        <a class="brand" href="/" data-enhance-nav="false">
+            <span class="brand-mark"><Icon Name="notes" Size="16" /></span> Notas
+        </a>
+        <AuthorizeView>
+            <Authorized>
+                <a class="btn btn-ghost" href="/" data-enhance-nav="false"><Icon Name="chevron-left" Size="16" /> Voltar às notas</a>
+            </Authorized>
+        </AuthorizeView>
+    </header>
+    <main class="auth-card" id="main">
+        @Body
+    </main>
+    <footer class="auth-foot">Suas notas são privadas e isoladas por conta.</footer>
+</div>

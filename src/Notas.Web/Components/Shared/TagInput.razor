@@ -1,0 +1,49 @@
+<div class="tag-input" @onclick="FocusInput">
+    @foreach (var t in Tags)
+    {
+        <span class="chip" @key="t">
+            #@t
+            @if (!ReadOnly)
+            {
+                <button type="button" class="chip-x" @onclick="() => Remove(t)" aria-label="Remover tag @t"><Icon Name="x" Size="12" /></button>
+            }
+        </span>
+    }
+    @if (!ReadOnly && Tags.Count < TagRules.MaxPerNote)
+    {
+        <input @ref="_input" type="text" class="tag-field" list="tag-suggestions" maxlength="@TagRules.MaxLength"
+               placeholder="@(Tags.Count == 0 ? "Adicionar tags…" : "")" aria-label="Adicionar tag"
+               @bind="_draft" @bind:event="oninput" @onkeydown="OnKey" @onblur="Commit" />
+        <datalist id="tag-suggestions">
+            @foreach (var s in Suggestions.Where(s => !Tags.Contains(s.Name)).Take(20)) { <option value="@s.Name"></option> }
+        </datalist>
+    }
+</div>
+
+@code {
+    [Parameter] public List<string> Tags { get; set; } = [];
+    [Parameter] public EventCallback<List<string>> TagsChanged { get; set; }
+    [Parameter] public IReadOnlyList<TagDto> Suggestions { get; set; } = [];
+    [Parameter] public bool ReadOnly { get; set; }
+
+    private string _draft = "";
+    private ElementReference _input;
+
+    private async Task FocusInput() { if (!ReadOnly) await _input.FocusAsync(); }
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or "," ) await Commit();
+        else if (e.Key == "Backspace" && _draft.Length == 0 && Tags.Count > 0) await Remove(Tags[^1]);
+    }
+
+    private async Task Commit()
+    {
+        var raw = _draft.Replace(",", "");
+        _draft = "";
+        if (!TagRules.TryNormalize(raw, out var n) || n.Length > TagRules.MaxLength || Tags.Contains(n)) return;
+        await TagsChanged.InvokeAsync([.. Tags, n]);
+    }
+
+    private Task Remove(string t) => TagsChanged.InvokeAsync(Tags.Where(x => x != t).ToList());
+}

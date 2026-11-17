@@ -1,0 +1,143 @@
+@inject ClientClock Clock
+
+<div class="list-head">
+    <button class="icon-btn menu-btn" @onclick="OnMenu" aria-label="Abrir menu"><Icon Name="menu" /></button>
+    <div class="search">
+        <Icon Name="search" Size="16" />
+        <input id="search-input" type="search" placeholder="Buscar notas  (Ctrl+K)" value="@Query.Search" autocomplete="off"
+               aria-label="Buscar notas" @oninput="SearchInput" />
+    </div>
+    <button class="icon-btn @(_filters || HasDates ? "is-on" : "")" @onclick="() => _filters = !_filters"
+            aria-label="Filtrar por data" aria-expanded="@(_filters ? "true" : "false")" title="Filtrar por data"><Icon Name="filter" /></button>
+    <button class="icon-btn" @onclick="OnNew" aria-label="Nova nota" title="Nova nota"><Icon Name="plus" /></button>
+</div>
+
+@if (_filters)
+{
+    <div class="filters">
+        <label>De <input type="date" value="@Query.From?.ToString("yyyy-MM-dd")" @onchange="e => DateChanged(true, e.Value?.ToString())" /></label>
+        <label>Até <input type="date" value="@Query.To?.ToString("yyyy-MM-dd")" @onchange="e => DateChanged(false, e.Value?.ToString())" /></label>
+        @if (HasDates) { <button class="btn btn-ghost btn-sm" @onclick="ClearDates">Limpar</button> }
+    </div>
+}
+
+<div class="list-title">
+    <h1>@Title</h1>
+    @if (!Loading && Error is null) { <span class="muted">@Total @(Total == 1 ? "nota" : "notas")</span> }
+    @if (Query.View == NoteView.Trash && Total > 0 && !Loading)
+    {
+        <button class="btn btn-ghost btn-sm danger-text" @onclick="OnEmptyTrash">Esvaziar lixeira</button>
+    }
+</div>
+
+<div class="list-body" id="note-list">
+    @if (Loading)
+    {
+        <ul class="skeleton-list" aria-busy="true" aria-label="Carregando notas">
+            @for (var i = 0; i < 6; i++)
+            {
+                <li class="skeleton-item"><span class="sk sk-title"></span><span class="sk sk-line"></span><span class="sk sk-line short"></span></li>
+            }
+        </ul>
+    }
+    else if (Error is not null)
+    {
+        <EmptyState Icon="alert" Title="Algo deu errado" Description="@Error">
+            <button class="btn btn-secondary" @onclick="OnRetry">Tentar novamente</button>
+        </EmptyState>
+    }
+    else if (Items.Count == 0)
+    {
+        @if (!string.IsNullOrWhiteSpace(Query.Search))
+        {
+            <EmptyState Icon="search" Title="Nada encontrado" Description="@($"Nenhuma nota corresponde a “{Query.Search}”. Tente outras palavras.")" />
+        }
+        else if (Query.View == NoteView.Trash)
+        {
+            <EmptyState Icon="trash" Title="Lixeira vazia" Description="Notas excluídas ficam aqui por 30 dias antes de sumirem de vez." />
+        }
+        else if (Query.View is NoteView.Archived)
+        {
+            <EmptyState Icon="archive" Title="Nada arquivado" Description="Arquive notas que você não usa mais, sem perdê-las." />
+        }
+        else if (Query.View == NoteView.Pinned)
+        {
+            <EmptyState Icon="pin" Title="Nenhuma nota fixada" Description="Fixe as notas importantes para mantê-las sempre no topo." />
+        }
+        else if (Query.View == NoteView.Favorites)
+        {
+            <EmptyState Icon="star" Title="Sem favoritas ainda" Description="Marque uma nota com a estrela para encontrá-la rapidamente." />
+        }
+        else
+        {
+            <EmptyState Icon="sparkle" Title="Sua primeira nota" Description="Capture uma ideia, uma lista ou um rascunho. Tudo é salvo automaticamente.">
+                <button class="btn btn-primary" @onclick="OnNew"><Icon Name="plus" Size="16" /> Criar nota</button>
+            </EmptyState>
+        }
+    }
+    else
+    {
+        <ul class="note-items">
+            @foreach (var n in Items)
+            {
+                <li @key="n.Id">
+                    <button class="note-item @(n.Id == SelectedId ? "selected" : "")" aria-current="@(n.Id == SelectedId ? "true" : null)"
+                            @onclick="() => OnSelect.InvokeAsync(n.Id)">
+                        <span class="note-item-top">
+                            <span class="note-title">@(string.IsNullOrWhiteSpace(n.Title) ? "Sem título" : n.Title)</span>
+                            <span class="note-flags">
+                                @if (n.IsPinned) { <Icon Name="pin" Size="13" /> }
+                                @if (n.IsFavorite) { <Icon Name="star" Size="13" /> }
+                            </span>
+                        </span>
+                        <span class="note-snippet">@(n.Snippet.Length == 0 ? "Nota vazia" : n.Snippet)</span>
+                        <span class="note-meta">
+                            <time datetime="@n.UpdatedAt.ToString("O")">@Clock.Relative(n.UpdatedAt)</time>
+                            @if (n.FolderName is not null) { <span class="meta-pill"><Icon Name="folder" Size="11" /> @n.FolderName</span> }
+                            @foreach (var t in n.Tags.Take(2)) { <span class="meta-pill">#@t</span> }
+                        </span>
+                    </button>
+                </li>
+            }
+        </ul>
+        @if (HasMore)
+        {
+            <div class="load-more">
+                <button class="btn btn-secondary btn-sm" disabled="@LoadingMore" @onclick="OnLoadMore">@(LoadingMore ? "Carregando…" : "Carregar mais")</button>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public NoteQuery Query { get; set; } = new();
+    [Parameter] public IReadOnlyList<NoteListItemDto> Items { get; set; } = [];
+    [Parameter] public int Total { get; set; }
+    [Parameter] public bool Loading { get; set; }
+    [Parameter] public bool LoadingMore { get; set; }
+    [Parameter] public bool HasMore { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public Guid? SelectedId { get; set; }
+    [Parameter] public EventCallback<string> OnSearch { get; set; }
+    [Parameter] public EventCallback<(DateOnly? From, DateOnly? To)> OnDates { get; set; }
+    [Parameter] public EventCallback<Guid> OnSelect { get; set; }
+    [Parameter] public EventCallback OnNew { get; set; }
+    [Parameter] public EventCallback OnMenu { get; set; }
+    [Parameter] public EventCallback OnLoadMore { get; set; }
+    [Parameter] public EventCallback OnRetry { get; set; }
+    [Parameter] public EventCallback OnEmptyTrash { get; set; }
+
+    private bool _filters;
+
+    private Task SearchInput(ChangeEventArgs e) => OnSearch.InvokeAsync(e.Value?.ToString() ?? "");
+    private bool HasDates => Query.From is not null || Query.To is not null;
+
+    private Task DateChanged(bool isFrom, string? value)
+    {
+        DateOnly? d = DateOnly.TryParse(value, out var parsed) ? parsed : null;
+        return OnDates.InvokeAsync(isFrom ? (d, Query.To) : (Query.From, d));
+    }
+
+    private Task ClearDates() => OnDates.InvokeAsync((null, null));
+}

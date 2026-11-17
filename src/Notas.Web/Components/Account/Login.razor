@@ -1,0 +1,62 @@
+@page "/account/login"
+@inject SignInManager<AppUser> SignInManager
+@inject NavigationManager Nav
+
+<PageTitle>Entrar · Notas</PageTitle>
+
+<h1>Entrar</h1>
+<p class="lead">Acesse suas anotações de qualquer lugar.</p>
+
+@if (!string.IsNullOrEmpty(_error)) { <div class="alert alert-danger" role="alert">@_error</div> }
+@if (Msg == "deleted") { <div class="alert alert-info" role="status">Sua conta e todos os dados foram excluídos.</div> }
+@if (Msg == "reset") { <div class="alert alert-success" role="status">Senha redefinida. Entre com a nova senha.</div> }
+
+<EditForm Model="Input" FormName="login" method="post" OnValidSubmit="LoginAsync" class="form" novalidate>
+    <DataAnnotationsValidator />
+    <div class="field">
+        <label for="email">E-mail</label>
+        <InputText id="email" @bind-Value="Input.Email" type="email" autocomplete="username" inputmode="email" />
+        <ValidationMessage For="() => Input.Email" class="field-error" />
+    </div>
+    <div class="field">
+        <label for="password">Senha</label>
+        <InputText id="password" @bind-Value="Input.Password" type="password" autocomplete="current-password" />
+        <ValidationMessage For="() => Input.Password" class="field-error" />
+    </div>
+    <label class="check"><InputCheckbox @bind-Value="Input.RememberMe" /> Manter conectado neste dispositivo</label>
+    <button type="submit" class="btn btn-primary btn-block">Entrar</button>
+</EditForm>
+
+<p class="auth-links">
+    <a href="account/forgot-password">Esqueci minha senha</a> · <a href="account/register">Criar conta</a>
+</p>
+
+@code {
+    private string? _error;
+
+    [SupplyParameterFromForm] private LoginInput Input { get; set; } = new();
+    [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
+    [SupplyParameterFromQuery(Name = "msg")] private string? Msg { get; set; }
+
+    private async Task LoginAsync()
+    {
+        var result = await SignInManager.PasswordSignInAsync(Input.Email.Trim(), Input.Password, Input.RememberMe, lockoutOnFailure: true);
+        if (result.Succeeded) { Nav.NavigateTo(SafeLocal(ReturnUrl)); return; }
+        _error = result.IsLockedOut
+            ? "Muitas tentativas. Aguarde alguns minutos e tente novamente."
+            : "E-mail ou senha incorretos."; // mesma mensagem para usuário inexistente (anti-enumeração)
+    }
+
+    // Anti open-redirect: só aceita caminhos locais.
+    private static string SafeLocal(string? url) =>
+        url is { Length: > 0 } && url[0] == '/' && !url.StartsWith("//") && !url.StartsWith("/\\") ? url : "/";
+
+    private sealed class LoginInput
+    {
+        [Required(ErrorMessage = "Informe seu e-mail."), EmailAddress(ErrorMessage = "E-mail inválido.")]
+        public string Email { get; set; } = "";
+        [Required(ErrorMessage = "Informe sua senha.")]
+        public string Password { get; set; } = "";
+        public bool RememberMe { get; set; }
+    }
+}

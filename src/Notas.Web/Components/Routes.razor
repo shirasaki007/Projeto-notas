@@ -1,0 +1,18 @@
+<Router AppAssembly="typeof(Program).Assembly">
+    <Found Context="routeData">
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(AccountLayout)">
+            <NotAuthorized>
+                <RedirectToLogin />
+            </NotAuthorized>
+        </AuthorizeRouteView>
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="typeof(AccountLayout)">
+            <PageTitle>Não encontrado · Notas</PageTitle>
+            <h1>Página não encontrada</h1>
+            <p class="lead">O endereço que você tentou acessar não existe.</p>
+            <a class="btn btn-primary" href="/" data-enhance-nav="false">Voltar às notas</a>
+        </LayoutView>
+    </NotFound>
+</Router>
