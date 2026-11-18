@@ -343,6 +343,38 @@ namespace Notas.Infrastructure.Data.Migrations
                     b.ToTable("Tags");
                 });
 
+            modelBuilder.Entity("Notas.Core.Entities.UserPreferences", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Accent")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
+
+                    b.Property<int>("ColumnWidth")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EditorFont")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<double>("FontSize")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("LineHeight")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("UserPreferences");
+                });
+
             modelBuilder.Entity("Notas.Infrastructure.Data.AppUser", b =>
                 {
                     b.Property<string>("Id")
@@ -537,6 +569,15 @@ namespace Notas.Infrastructure.Data.Migrations
                     b.HasOne("Notas.Infrastructure.Data.AppUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Notas.Core.Entities.UserPreferences", b =>
+                {
+                    b.HasOne("Notas.Infrastructure.Data.AppUser", null)
+                        .WithOne()
+                        .HasForeignKey("Notas.Core.Entities.UserPreferences", "UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

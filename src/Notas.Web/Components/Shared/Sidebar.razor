@@ -91,7 +91,7 @@
         </div>
     </section>
 
-    <section class="nav-section" aria-labelledby="sidebar-folders-heading">
+    <section class="nav-section folders-section @(_openFolderMenuId is not null ? "menu-open" : "")" aria-labelledby="sidebar-folders-heading">
         <div class="nav-section-head">
             <h2 id="sidebar-folders-heading"><span class="sidebar-label">Pastas</span></h2>
             <div class="section-actions">
@@ -271,6 +271,10 @@
                 <div class="user" data-tooltip="@context.User.Identity?.Name"><Icon Name="user" Size="16" /><span class="ellipsis sidebar-label">@context.User.Identity?.Name</span></div>
             </Authorized>
         </AuthorizeView>
+        <button type="button" class="foot-link appearance-trigger" @onclick="OnOpenAppearance"
+                aria-label="Aparência" data-tooltip="Aparência">
+            <Icon Name="type" Size="14" /><span class="sidebar-label">Aparência</span>
+        </button>
         <a class="foot-link" href="/account/manage" data-enhance-nav="false" aria-label="Conta" data-tooltip="Conta">
             <Icon Name="user" Size="14" /><span class="sidebar-label">Conta</span>
         </a>
@@ -305,6 +309,8 @@
     [Parameter] public EventCallback OnNewNote { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback OnToggleCollapse { get; set; }
+    [Parameter] public EventCallback OnOpenAppearance { get; set; }
+    [Parameter] public EventCallback<bool> OnFolderMenuOpenChanged { get; set; }
     [Parameter] public EventCallback<string> OnSearch { get; set; }
 
     private bool _adding, _focusInput, _focusSearch, _focusRename;
@@ -413,9 +419,9 @@
         _ => "roxo"
     };
 
-    private void StartAdd()
+    private async Task StartAdd()
     {
-        _openFolderMenuId = null;
+        await SetOpenFolderMenuAsync(null);
         _customizingFolderId = null;
         _foldersExpanded = true;
         _adding = true;
@@ -424,17 +430,53 @@
         _newFolderColor = FolderColorOptions[0];
     }
     private void CancelAdd() { _adding = false; }
-    private void ToggleFolders() { _foldersExpanded = !_foldersExpanded; _openFolderMenuId = null; if (!_foldersExpanded) _adding = false; }
-    private void ToggleTags() => _tagsExpanded = !_tagsExpanded;
-    private void ToggleFolderMenu(Guid id)
+    private async Task ToggleFolders()
+    {
+        _foldersExpanded = !_foldersExpanded;
+        await SetOpenFolderMenuAsync(null);
+        if (!_foldersExpanded) _adding = false;
+    }
+    private async Task ToggleTags()
+    {
+        _tagsExpanded = !_tagsExpanded;
+        await SetOpenFolderMenuAsync(null);
+        _customizingFolderId = null;
+    }
+    private async Task ToggleFolderMenu(Guid id)
     {
         _customizingFolderId = null;
-        _openFolderMenuId = _openFolderMenuId == id ? null : id;
+        await SetOpenFolderMenuAsync(_openFolderMenuId == id ? null : id);
     }
-    private void CloseFolderMenu() { _openFolderMenuId = null; _customizingFolderId = null; }
-    private Task SelectFolderAsync(Guid id) { _openFolderMenuId = null; return OnFolder.InvokeAsync(id); }
-    private Task DeleteFolderFromMenu(Guid id) { _openFolderMenuId = null; return OnDeleteFolder.InvokeAsync(id); }
-    private void StartRename(FolderDto folder) { _openFolderMenuId = null; _customizingFolderId = null; _renamingFolderId = folder.Id; _renamingFolderName = folder.Name; _foldersExpanded = true; _focusRename = true; }
+    private Task SetOpenFolderMenuAsync(Guid? id)
+    {
+        if (_openFolderMenuId == id) return Task.CompletedTask;
+        _openFolderMenuId = id;
+        return OnFolderMenuOpenChanged.InvokeAsync(id is not null);
+    }
+    private async Task CloseFolderMenu()
+    {
+        await SetOpenFolderMenuAsync(null);
+        _customizingFolderId = null;
+    }
+    private async Task SelectFolderAsync(Guid id)
+    {
+        await SetOpenFolderMenuAsync(null);
+        await OnFolder.InvokeAsync(id);
+    }
+    private async Task DeleteFolderFromMenu(Guid id)
+    {
+        await SetOpenFolderMenuAsync(null);
+        await OnDeleteFolder.InvokeAsync(id);
+    }
+    private async Task StartRename(FolderDto folder)
+    {
+        await SetOpenFolderMenuAsync(null);
+        _customizingFolderId = null;
+        _renamingFolderId = folder.Id;
+        _renamingFolderName = folder.Name;
+        _foldersExpanded = true;
+        _focusRename = true;
+    }
     private void CancelRename() => _renamingFolderId = null;
 
     private void SetNewFolderColor(string? color)
@@ -586,7 +628,7 @@
     private async Task OnFolderMenuKeyDown(Guid id, KeyboardEventArgs e)
     {
         if (e.Key != "Escape") return;
-        _openFolderMenuId = null;
+        await SetOpenFolderMenuAsync(null);
         _customizingFolderId = null;
         await JS.InvokeVoidAsync("notas.focus", $"folder-menu-trigger-{id:N}");
     }

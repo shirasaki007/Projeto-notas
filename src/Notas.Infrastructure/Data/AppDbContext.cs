@@ -10,6 +10,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<NoteVersion> NoteVersions => Set<NoteVersion>();
     public DbSet<Attachment> Attachments => Set<Attachment>();
+    public DbSet<UserPreferences> UserPreferences => Set<UserPreferences>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -56,6 +57,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
             e.Property(x => x.StoragePath).HasMaxLength(200).IsRequired();
             e.HasOne<AppUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Note).WithMany(n => n.Attachments).HasForeignKey(x => x.NoteId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<UserPreferences>(e =>
+        {
+            e.HasKey(x => x.UserId);
+            e.Property(x => x.EditorFont).HasMaxLength(32).IsRequired();
+            e.Property(x => x.Accent).HasMaxLength(7).IsRequired();
+            e.Property(x => x.UpdatedAt).IsRequired();
+            e.HasOne<AppUser>().WithOne().HasForeignKey<UserPreferences>(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // Busca de texto completo (PostgreSQL): coluna gerada + índice GIN.

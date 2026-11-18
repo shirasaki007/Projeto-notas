@@ -39,19 +39,19 @@
             @if (!Note.IsTrashed)
             {
                 <div class="seg" role="group" aria-label="Modo do editor">
-                    <button class="seg-btn @(_mode == ViewMode.Write ? "active" : "")" aria-pressed="@(_mode == ViewMode.Write ? "true" : "false")" @onclick="() => SetMode(ViewMode.Write)" title="Escrever"><Icon Name="edit" Size="15" /></button>
-                    <button class="seg-btn seg-split @(_mode == ViewMode.Split ? "active" : "")" aria-pressed="@(_mode == ViewMode.Split ? "true" : "false")" @onclick="() => SetMode(ViewMode.Split)" title="Dividido"><Icon Name="columns" Size="15" /></button>
-                    <button class="seg-btn @(_mode == ViewMode.Read ? "active" : "")" aria-pressed="@(_mode == ViewMode.Read ? "true" : "false")" @onclick="() => SetMode(ViewMode.Read)" title="Visualizar"><Icon Name="eye" Size="15" /></button>
+                    <button class="seg-btn @(_mode == ViewMode.Write ? "active" : "")" aria-pressed="@(_mode == ViewMode.Write ? "true" : "false")" @onclick="() => SetMode(ViewMode.Write)" title="@Tooltip("Escrever")"><Icon Name="edit" Size="15" /></button>
+                    <button class="seg-btn seg-split @(_mode == ViewMode.Split ? "active" : "")" aria-pressed="@(_mode == ViewMode.Split ? "true" : "false")" @onclick="() => SetMode(ViewMode.Split)" title="@Tooltip("Dividido")"><Icon Name="columns" Size="15" /></button>
+                    <button class="seg-btn @(_mode == ViewMode.Read ? "active" : "")" aria-pressed="@(_mode == ViewMode.Read ? "true" : "false")" @onclick="() => SetMode(ViewMode.Read)" title="@Tooltip("Visualizar")"><Icon Name="eye" Size="15" /></button>
                 </div>
-                <button class="icon-btn @(Note.IsPinned ? "is-on" : "")" aria-pressed="@(Note.IsPinned ? "true" : "false")" title="@(Note.IsPinned ? "Desafixar" : "Fixar")" aria-label="@(Note.IsPinned ? "Desafixar nota" : "Fixar nota")"
+                <button class="icon-btn @(Note.IsPinned ? "is-on" : "")" aria-pressed="@(Note.IsPinned ? "true" : "false")" title="@Tooltip(Note.IsPinned ? "Desafixar" : "Fixar")" aria-label="@(Note.IsPinned ? "Desafixar nota" : "Fixar nota")"
                         @onclick="() => Act(Note.IsPinned ? NoteAction.Unpin : NoteAction.Pin)"><Icon Name="pin" /></button>
-                <button class="icon-btn @(Note.IsFavorite ? "is-on" : "")" aria-pressed="@(Note.IsFavorite ? "true" : "false")" title="@(Note.IsFavorite ? "Remover dos favoritos" : "Favoritar")" aria-label="@(Note.IsFavorite ? "Remover dos favoritos" : "Favoritar nota")"
+                <button class="icon-btn @(Note.IsFavorite ? "is-on" : "")" aria-pressed="@(Note.IsFavorite ? "true" : "false")" title="@Tooltip(Note.IsFavorite ? "Remover dos favoritos" : "Favoritar")" aria-label="@(Note.IsFavorite ? "Remover dos favoritos" : "Favoritar nota")"
                         @onclick="() => Act(Note.IsFavorite ? NoteAction.Unfavorite : NoteAction.Favorite)"><Icon Name="star" /></button>
-                <button class="icon-btn" title="@(Note.IsArchived ? "Desarquivar" : "Arquivar")" aria-label="@(Note.IsArchived ? "Desarquivar nota" : "Arquivar nota")"
+                <button class="icon-btn" title="@Tooltip(Note.IsArchived ? "Desarquivar" : "Arquivar")" aria-label="@(Note.IsArchived ? "Desarquivar nota" : "Arquivar nota")"
                         @onclick="() => Act(Note.IsArchived ? NoteAction.Unarchive : NoteAction.Archive)"><Icon Name="archive" /></button>
-                <button class="icon-btn @(_panel == Panel.History ? "is-on" : "")" title="Histórico" aria-label="Histórico de versões" @onclick="() => TogglePanel(Panel.History)"><Icon Name="history" /></button>
-                <button class="icon-btn @(_panel == Panel.Attachments ? "is-on" : "")" title="Anexos" aria-label="Anexos" @onclick="() => TogglePanel(Panel.Attachments)"><Icon Name="paperclip" /></button>
-                <button class="icon-btn danger-text" title="Mover para a lixeira" aria-label="Mover para a lixeira" @onclick="() => Act(NoteAction.Trash)"><Icon Name="trash" /></button>
+                <button class="icon-btn @(_panel == Panel.History ? "is-on" : "")" title="@Tooltip("Histórico")" aria-label="Histórico de versões" @onclick="() => TogglePanel(Panel.History)"><Icon Name="history" /></button>
+                <button class="icon-btn @(_panel == Panel.Attachments ? "is-on" : "")" title="@Tooltip("Anexos")" aria-label="Anexos" @onclick="() => TogglePanel(Panel.Attachments)"><Icon Name="paperclip" /></button>
+                <button class="icon-btn danger-text" title="@Tooltip("Mover para a lixeira")" aria-label="Mover para a lixeira" @onclick="() => Act(NoteAction.Trash)"><Icon Name="trash" /></button>
             }
             else
             {
@@ -95,16 +95,16 @@
             @if (!_readOnly && _mode != ViewMode.Read)
             {
                 <div class="toolbar" role="toolbar" aria-label="Formatação">
-                    <button class="tb" title="Título" aria-label="Título" @onclick='() => Format("h2")'><Icon Name="heading" Size="16" /></button>
-                    <button class="tb" title="Negrito (Ctrl+B)" aria-label="Negrito" @onclick='() => Format("bold")'><Icon Name="bold" Size="16" /></button>
-                    <button class="tb" title="Itálico (Ctrl+I)" aria-label="Itálico" @onclick='() => Format("italic")'><Icon Name="italic" Size="16" /></button>
-                    <button class="tb" title="Código" aria-label="Código" @onclick='() => Format("code")'><Icon Name="code" Size="16" /></button>
+                    <button class="tb" title="@Tooltip("Título")" aria-label="Título" @onclick='() => Format("h2")'><Icon Name="heading" Size="16" /></button>
+                    <button class="tb" title="@Tooltip("Negrito (Ctrl+B)")" aria-label="Negrito" @onclick='() => Format("bold")'><Icon Name="bold" Size="16" /></button>
+                    <button class="tb" title="@Tooltip("Itálico (Ctrl+I)")" aria-label="Itálico" @onclick='() => Format("italic")'><Icon Name="italic" Size="16" /></button>
+                    <button class="tb" title="@Tooltip("Código")" aria-label="Código" @onclick='() => Format("code")'><Icon Name="code" Size="16" /></button>
                     <span class="tb-sep"></span>
-                    <button class="tb" title="Lista" aria-label="Lista com marcadores" @onclick='() => Format("ul")'><Icon Name="list" Size="16" /></button>
-                    <button class="tb" title="Lista numerada" aria-label="Lista numerada" @onclick='() => Format("ol")'><Icon Name="list-ordered" Size="16" /></button>
-                    <button class="tb" title="Tarefas" aria-label="Lista de tarefas" @onclick='() => Format("task")'><Icon Name="check-square" Size="16" /></button>
-                    <button class="tb" title="Citação" aria-label="Citação" @onclick='() => Format("quote")'><Icon Name="quote" Size="16" /></button>
-                    <button class="tb" title="Link" aria-label="Link" @onclick='() => Format("link")'><Icon Name="link" Size="16" /></button>
+                    <button class="tb" title="@Tooltip("Lista")" aria-label="Lista com marcadores" @onclick='() => Format("ul")'><Icon Name="list" Size="16" /></button>
+                    <button class="tb" title="@Tooltip("Lista numerada")" aria-label="Lista numerada" @onclick='() => Format("ol")'><Icon Name="list-ordered" Size="16" /></button>
+                    <button class="tb" title="@Tooltip("Tarefas")" aria-label="Lista de tarefas" @onclick='() => Format("task")'><Icon Name="check-square" Size="16" /></button>
+                    <button class="tb" title="@Tooltip("Citação")" aria-label="Citação" @onclick='() => Format("quote")'><Icon Name="quote" Size="16" /></button>
+                    <button class="tb" title="@Tooltip("Link")" aria-label="Link" @onclick='() => Format("link")'><Icon Name="link" Size="16" /></button>
                 </div>
             }
 
@@ -153,6 +153,7 @@
     [Parameter, EditorRequired] public NoteDetailDto Note { get; set; } = default!;
     [Parameter] public IReadOnlyList<FolderDto> Folders { get; set; } = [];
     [Parameter] public IReadOnlyList<TagDto> TagSuggestions { get; set; } = [];
+    [Parameter] public bool ContextMenuOpen { get; set; }
     [Parameter] public EventCallback<NoteDetailDto> OnSaved { get; set; }
     [Parameter] public EventCallback<NoteDetailDto> OnReplaced { get; set; }
     [Parameter] public EventCallback<NoteAction> OnAction { get; set; }
@@ -170,6 +171,8 @@
     private ViewMode _mode = ViewMode.Write;
     private Panel _panel = Panel.None;
     private bool _disposed;
+
+    private string? Tooltip(string value) => ContextMenuOpen ? null : value;
 
     // O pai recria este componente (via @key) ao trocar de nota ou restaurar versão;
     // por isso os campos são carregados uma única vez e nunca sobrescritos por re-render.

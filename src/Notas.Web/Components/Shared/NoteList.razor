@@ -10,8 +10,8 @@
                aria-label="Buscar notas" @oninput="SearchInput" />
     </div>
     <button class="icon-btn @(_filters || HasDates ? "is-on" : "")" @onclick="() => _filters = !_filters"
-            aria-label="Filtrar por data" aria-expanded="@(_filters ? "true" : "false")" title="Filtrar por data"><Icon Name="filter" /></button>
-    <button class="icon-btn" @onclick="OnNew" aria-label="Nova nota" title="Nova nota"><Icon Name="plus" /></button>
+            aria-label="Filtrar por data" aria-expanded="@(_filters ? "true" : "false")" title="@Tooltip("Filtrar por data")"><Icon Name="filter" /></button>
+    <button class="icon-btn" @onclick="OnNew" aria-label="Nova nota" title="@Tooltip("Nova nota")"><Icon Name="plus" /></button>
 </div>
 
 @if (_filters)
@@ -117,7 +117,7 @@
                                     </span>
                                     <span class="note-snippet">@HighlightText(n.Snippet.Length == 0 ? "Nota vazia" : n.Snippet)</span>
                                     <span class="note-meta">
-                                        <time datetime="@n.UpdatedAt.ToString("O")" title="@Clock.Full(n.UpdatedAt)">@Clock.Relative(n.UpdatedAt)</time>
+                                        <time datetime="@n.UpdatedAt.ToString("O")" title="@Tooltip(Clock.Full(n.UpdatedAt))">@Clock.Relative(n.UpdatedAt)</time>
                                         @if (n.FolderName is not null) { <span class="meta-pill"><Icon Name="folder" Size="11" /> @HighlightText(n.FolderName)</span> }
                                         @foreach (var t in n.Tags.Take(2)) { <span class="meta-pill">#@HighlightText(t)</span> }
                                         @if (n.Tags.Count > 2) { <span class="meta-pill more-tags">+@(n.Tags.Count - 2)</span> }
@@ -150,6 +150,7 @@
     [Parameter] public bool HasMore { get; set; }
     [Parameter] public string? Error { get; set; }
     [Parameter] public Guid? SelectedId { get; set; }
+    [Parameter] public bool ContextMenuOpen { get; set; }
     [Parameter] public EventCallback<string> OnSearch { get; set; }
     [Parameter] public EventCallback<(DateOnly? From, DateOnly? To)> OnDates { get; set; }
     [Parameter] public EventCallback<Guid> OnSelect { get; set; }
@@ -163,6 +164,8 @@
 
     private bool _filters;
     private string[] _searchTerms = [];
+
+    private string? Tooltip(string value) => ContextMenuOpen ? null : value;
 
     protected override void OnParametersSet()
     {

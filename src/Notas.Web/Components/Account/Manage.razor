@@ -76,9 +76,27 @@
     private List<string> _pwErrors = [];
 
     [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
-    [SupplyParameterFromForm(FormName = "profile")] private ProfileInput Profile { get; set; } = new();
-    [SupplyParameterFromForm(FormName = "password")] private PwInput Pw { get; set; } = new();
-    [SupplyParameterFromForm(FormName = "delete-account")] private DelInput Del { get; set; } = new();
+    private ProfileInput _profile = new();
+    private PwInput _pw = new();
+    private DelInput _del = new();
+    [SupplyParameterFromForm(FormName = "profile")]
+    private ProfileInput Profile
+    {
+        get => _profile;
+        set => _profile = value ?? new();
+    }
+    [SupplyParameterFromForm(FormName = "password")]
+    private PwInput Pw
+    {
+        get => _pw;
+        set => _pw = value ?? new();
+    }
+    [SupplyParameterFromForm(FormName = "delete-account")]
+    private DelInput Del
+    {
+        get => _del;
+        set => _del = value ?? new();
+    }
 
     protected override async Task OnInitializedAsync()
     {

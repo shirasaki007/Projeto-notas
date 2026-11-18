@@ -34,7 +34,14 @@
 @code {
     private string? _error;
 
-    [SupplyParameterFromForm] private LoginInput Input { get; set; } = new();
+    private LoginInput _input = new();
+    [SupplyParameterFromForm]
+    private LoginInput Input
+    {
+        get => _input;
+        set => _input = value ?? new();
+    }
+
     [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
     [SupplyParameterFromQuery(Name = "msg")] private string? Msg { get; set; }
 

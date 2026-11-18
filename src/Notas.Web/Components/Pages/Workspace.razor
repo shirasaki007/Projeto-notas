@@ -1,4 +1,5 @@
 @page "/"
+@using Notas.Core.Entities
 @layout BlankLayout
 @attribute [Authorize]
 @rendermode RenderModes.Interactive
@@ -6,6 +7,7 @@
 @inject INoteService Notes
 @inject IFolderService FolderSvc
 @inject ITagService TagSvc
+@inject IPreferencesService PreferencesSvc
 @inject ToastService ToastSvc
 @inject ClientClock Clock
 @inject IJSRuntime JS
@@ -14,8 +16,8 @@
 <PageTitle>Notas</PageTitle>
 <a class="skip-link" href="#note-list">Ir para a lista de notas</a>
 
-<div class="app @(_sidebarCollapsed ? "sidebar-collapsed" : "") @(_drawerOpen ? "drawer-open" : "") @(_selected is not null ? "has-note" : "")"
-     @onkeydown="HandleWorkspaceKeyDown">
+<div class="app @(_sidebarCollapsed ? "sidebar-collapsed" : "") @(_drawerOpen ? "drawer-open" : "") @(_selected is not null ? "has-note" : "") @(_folderContextMenuOpen ? "context-menu-open" : "")"
+     style="@AppearanceStyle" @onkeydown="HandleWorkspaceKeyDown">
     <Sidebar Counts="_counts" Folders="_folders" Tags="_tags" RecentNotes="_recentNotes" RecentNotesError="@_recentNotesError"
              SelectedId="_selected?.Id" Collapsed="_sidebarCollapsed"
              DraggedNoteId="_draggedNoteId" OnMoveNoteToFolder="MoveNoteToFolderAsync"
@@ -24,7 +26,8 @@
              OnView="SetViewAsync" OnFolder="SetFolderAsync" OnTag="SetTagAsync"
              OnCreateFolder="CreateFolderAsync" OnRenameFolder="RenameFolderAsync" OnDeleteFolder="AskDeleteFolder"
              OnNewNoteInFolder="NewNoteInFolderAsync" OnSelectNote="SelectRecentAsync"
-             OnNewNote="NewNoteAsync" OnClose="CloseDrawer" OnToggleCollapse="ToggleSidebar" />
+             OnNewNote="NewNoteAsync" OnClose="CloseDrawer" OnToggleCollapse="ToggleSidebar"
+             OnOpenAppearance="OpenAppearance" OnFolderMenuOpenChanged="OnFolderMenuOpenChanged" />
     <div class="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="Redimensionar barra lateral"
          aria-controls="primary-sidebar" aria-valuemin="220" aria-valuemax="420" aria-valuenow="272"
          aria-keyshortcuts="ArrowLeft ArrowRight" tabindex="0"></div>
@@ -33,7 +36,7 @@
     <section class="pane pane-list" aria-label="Lista de notas">
         <NoteList Title="@ListTitle" Query="_query" Items="_notes" Total="_total"
                   Loading="_loading" LoadingMore="_loadingMore" HasMore="HasMore" Error="@_error"
-                  SelectedId="_selected?.Id"
+                  SelectedId="_selected?.Id" ContextMenuOpen="_folderContextMenuOpen"
                   OnSearch="OnSearchAsync" OnDates="OnDatesAsync" OnSelect="SelectAsync" OnNew="NewNoteAsync"
                   OnMenu="() => _drawerOpen = true" OnLoadMore="LoadMoreAsync" OnRetry="RetryAsync"
                   OnEmptyTrash="AskEmptyTrash" OnStartDrag="StartNoteDrag" OnEndDrag="EndNoteDrag" />
@@ -43,6 +46,7 @@
         @if (_selected is not null)
         {
             <NoteEditor @key="_editorKey" @ref="_editor" Note="_selected" Folders="_folders" TagSuggestions="_tags"
+                        ContextMenuOpen="_folderContextMenuOpen"
                         OnSaved="OnEditorSavedAsync" OnReplaced="OnReplacedAsync" OnAction="HandleActionAsync"
                         OnBack="CloseEditorAsync" OnReload="ReloadSelectedAsync" />
         }
@@ -56,6 +60,9 @@
     </section>
 </div>
 
+<AppearanceDialog Open="_appearanceOpen" Preferences="_preferences" PreviewStyle="@AppearanceStyle"
+                  OnChanged="OnAppearanceChangedAsync" OnRestoreDefaults="RestoreAppearanceDefaultsAsync"
+                  OnClose="CloseAppearance" />
 <ConfirmDialog Open="_confirm is not null" Title="@_confirm?.Title" Message="@_confirm?.Message"
                ConfirmText="@(_confirm?.ConfirmText ?? "Confirmar")" Danger="true"
                OnConfirm="RunConfirmAsync" OnCancel="() => _confirm = null" />
@@ -70,6 +77,7 @@
     private List<NoteListItemDto> _recentNotes = [];
     private int _total;
     private bool _loading = true, _loadingMore, _drawerOpen, _sidebarCollapsed;
+    private bool _appearanceOpen, _folderContextMenuOpen;
     private Guid? _draggedNoteId;
     private string _sidebarSearchText = "";
     private string? _error, _recentNotesError;
@@ -79,9 +87,19 @@
     private NoteCounts _counts = new(0, 0, 0, 0, 0);
     private IReadOnlyList<FolderDto> _folders = [];
     private IReadOnlyList<TagDto> _tags = [];
+    private UserPreferences _preferences = UserPreferences.Defaults.Create();
     private CancellationTokenSource? _searchCts;
+    private CancellationTokenSource? _appearanceSaveCts;
     private DotNetObjectReference<Workspace>? _sidebarInterop;
     private ConfirmState? _confirm;
+
+    private string AppearanceStyle => AppearanceStyleBuilder.Build(_preferences);
+
+    private Task OnFolderMenuOpenChanged(bool isOpen)
+    {
+        _folderContextMenuOpen = isOpen;
+        return Task.CompletedTask;
+    }
 
     private bool HasMore => _notes.Count < _total;
 
@@ -101,7 +119,72 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await Task.WhenAll(ReloadListAsync(showSkeleton: true), ReloadSidebarAsync(), ReloadRecentNotesAsync());
+        await Task.WhenAll(
+            ReloadListAsync(showSkeleton: true),
+            ReloadSidebarAsync(),
+            ReloadRecentNotesAsync(),
+            LoadPreferencesAsync());
+    }
+
+    private async Task LoadPreferencesAsync()
+    {
+        try { _preferences = await PreferencesSvc.GetCurrentAsync(); }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Falha ao carregar as preferências de aparência");
+            _preferences = UserPreferences.Defaults.Create();
+        }
+    }
+
+    private void OpenAppearance() => _appearanceOpen = true;
+    private void CloseAppearance() => _appearanceOpen = false;
+
+    private Task OnAppearanceChangedAsync(UserPreferences preferences)
+    {
+        _preferences = UserPreferences.Normalize(preferences, _preferences.UserId);
+        QueueAppearanceSave();
+        return Task.CompletedTask;
+    }
+
+    private Task RestoreAppearanceDefaultsAsync()
+    {
+        _preferences = UserPreferences.Defaults.Create(_preferences.UserId);
+        QueueAppearanceSave(restoreDefaults: true);
+        return Task.CompletedTask;
+    }
+
+    private void QueueAppearanceSave(bool restoreDefaults = false)
+    {
+        _appearanceSaveCts?.Cancel();
+        var cts = _appearanceSaveCts = new CancellationTokenSource();
+        var snapshot = UserPreferences.Normalize(_preferences, _preferences.UserId);
+        _ = SaveAppearanceAfterDelayAsync(snapshot, restoreDefaults, cts);
+    }
+
+    private async Task SaveAppearanceAfterDelayAsync(
+        UserPreferences preferences,
+        bool restoreDefaults,
+        CancellationTokenSource cts)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(400), cts.Token);
+            if (restoreDefaults)
+                await PreferencesSvc.RestoreDefaultsAsync(cts.Token);
+            else
+                await PreferencesSvc.SaveAsync(preferences, cts.Token);
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Falha ao salvar as preferências de aparência");
+            await InvokeAsync(() => ToastSvc.Error("Não foi possível salvar as preferências de aparência."));
+        }
+        finally
+        {
+            if (ReferenceEquals(_appearanceSaveCts, cts)) _appearanceSaveCts = null;
+            cts.Dispose();
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -510,6 +593,7 @@
     {
         _searchCts?.Cancel();
         _searchCts?.Dispose();
+        _appearanceSaveCts?.Cancel();
         if (_sidebarInterop is null) return;
 
         try { await JS.InvokeVoidAsync("notas.disposeSidebarInteractions"); }

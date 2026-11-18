@@ -1,0 +1,102 @@
+@using System.Globalization
+@using Notas.Core.Entities
+
+@if (Open)
+{
+    <div class="modal-backdrop" @onclick="OnClose" aria-hidden="true"></div>
+    <section class="modal appearance-modal" role="dialog" aria-modal="true"
+             aria-labelledby="appearance-title" aria-describedby="appearance-description"
+             style="@PreviewStyle" @onkeydown="OnKey" @onkeydown:stopPropagation="true">
+        <h2 id="appearance-title">Aparência</h2>
+        <p id="appearance-description">Personalize o editor. As alterações são salvas automaticamente.</p>
+
+        <section class="appearance-preview" aria-label="Pré-visualização">
+            <p>Uma boa ideia merece espaço para crescer. Ajuste a aparência para escrever com conforto.</p>
+        </section>
+
+        <div class="appearance-controls">
+            <label class="appearance-control" for="appearance-font">
+                <span>Fonte do editor</span>
+                <select id="appearance-font" autofocus @bind="Preferences.EditorFont" @bind:after="PreferencesChangedAsync">
+                    <option value="serif">Serifada</option>
+                    <option value="sans">Sans</option>
+                    <option value="mono">Mono</option>
+                    <option value="legivel">Legível</option>
+                </select>
+            </label>
+
+            <label class="appearance-control appearance-range" for="appearance-font-size">
+                <span>Tamanho do texto</span>
+                <output for="appearance-font-size">@Preferences.FontSize.ToString("0.00", CultureInfo.CurrentCulture) rem</output>
+                <input id="appearance-font-size" type="range" min="0.9" max="1.5" step="0.02"
+                       @bind="Preferences.FontSize" @bind:event="oninput" @bind:after="PreferencesChangedAsync" />
+            </label>
+
+            <label class="appearance-control appearance-range" for="appearance-line-height">
+                <span>Altura da linha</span>
+                <output for="appearance-line-height">@Preferences.LineHeight.ToString("0.00", CultureInfo.CurrentCulture)</output>
+                <input id="appearance-line-height" type="range" min="1.4" max="2.1" step="0.05"
+                       @bind="Preferences.LineHeight" @bind:event="oninput" @bind:after="PreferencesChangedAsync" />
+            </label>
+
+            <label class="appearance-control appearance-range" for="appearance-column-width">
+                <span>Largura da coluna</span>
+                <output for="appearance-column-width">@Preferences.ColumnWidth px</output>
+                <input id="appearance-column-width" type="range" min="640" max="1100" step="20"
+                       @bind="Preferences.ColumnWidth" @bind:event="oninput" @bind:after="PreferencesChangedAsync" />
+            </label>
+
+            <fieldset class="appearance-colors">
+                <legend>Cor de destaque</legend>
+                <div class="appearance-swatches">
+                    @foreach (var color in AccentColors)
+                    {
+                        <button type="button" class="appearance-color" style="@($"--appearance-color:{color}")"
+                                aria-label="@($"Usar cor {color}")"
+                                aria-pressed="@string.Equals(Preferences.Accent, color, StringComparison.OrdinalIgnoreCase)"
+                                @onclick="() => SetAccentAsync(color)"></button>
+                    }
+                    <label class="appearance-custom-color" for="appearance-custom-color">
+                        <span>Personalizada</span>
+                        <input id="appearance-custom-color" type="color" @bind="Preferences.Accent"
+                               @bind:event="oninput" @bind:after="PreferencesChangedAsync" />
+                    </label>
+                </div>
+            </fieldset>
+        </div>
+
+        <div class="appearance-actions">
+            <button type="button" class="btn btn-ghost" @onclick="OnRestoreDefaults">
+                <Icon Name="restore" Size="15" /> Restaurar padrão
+            </button>
+            <button type="button" class="btn btn-secondary" @onclick="OnClose">Fechar</button>
+        </div>
+    </section>
+}
+
+@code {
+    private static readonly string[] AccentColors =
+    [
+        "#8b5cf6", "#2563eb", "#0891b2", "#059669",
+        "#65a30d", "#d97706", "#e11d48", "#c026d3"
+    ];
+
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public UserPreferences Preferences { get; set; } = UserPreferences.Defaults.Create();
+    [Parameter] public string PreviewStyle { get; set; } = "";
+    [Parameter] public EventCallback<UserPreferences> OnChanged { get; set; }
+    [Parameter] public EventCallback OnRestoreDefaults { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private Task PreferencesChangedAsync() =>
+        OnChanged.InvokeAsync(UserPreferences.Normalize(Preferences));
+
+    private async Task SetAccentAsync(string accent)
+    {
+        Preferences.Accent = accent;
+        await PreferencesChangedAsync();
+    }
+
+    private Task OnKey(KeyboardEventArgs e) =>
+        e.Key == "Escape" ? OnClose.InvokeAsync() : Task.CompletedTask;
+}

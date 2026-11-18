@@ -106,8 +106,8 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-const string Csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
-                   "img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ws: wss:; " +
+const string Csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+                   "img-src 'self' data: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' ws: wss:; " +
                    "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
 app.Use(async (ctx, next) =>
 {

@@ -1,5 +1,6 @@
 using Notas.Core.Common;
 using Notas.Core.Dtos;
+using Notas.Core.Entities;
 
 namespace Notas.Core.Abstractions;
 
@@ -51,4 +52,11 @@ public interface IAttachmentService
     Task<Result<AttachmentDto>> UploadAsync(Guid noteId, string fileName, Stream content, CancellationToken ct = default);
     Task<Result<AttachmentFile>> OpenAsync(Guid id, CancellationToken ct = default);
     Task<Result> DeleteAsync(Guid id, CancellationToken ct = default);
+}
+
+public interface IPreferencesService
+{
+    Task<UserPreferences> GetCurrentAsync(CancellationToken ct = default);
+    Task<UserPreferences> SaveAsync(UserPreferences preferences, CancellationToken ct = default);
+    Task<UserPreferences> RestoreDefaultsAsync(CancellationToken ct = default);
 }

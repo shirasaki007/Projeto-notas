@@ -24,6 +24,7 @@ public static class DependencyInjection
         services.AddScoped<IFolderService, FolderService>();
         services.AddScoped<ITagService, TagService>();
         services.AddScoped<IAttachmentService, AttachmentService>();
+        services.AddScoped<IPreferencesService, PreferencesService>();
         services.AddHostedService<TrashPurgeService>();
         return services;
     }
